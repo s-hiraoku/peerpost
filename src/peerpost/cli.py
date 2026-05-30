@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import select
+import sqlite3
 import subprocess
 import sys
 import time
@@ -19,6 +20,7 @@ from .paths import ensure_home, get_paths
 
 KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"}
 HOOK_FORMATS = {"codex-hook", "copilot-hook"}
+SNIPPET_ADAPTERS = ("claude-code", "codex", "copilot", "antigravity", "generic")
 
 
 def eprint(message: str) -> None:
@@ -253,6 +255,107 @@ def command_paths(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _mode(path: Path) -> str:
+    try:
+        return oct(path.stat().st_mode & 0o777)
+    except OSError:
+        return "unknown"
+
+
+def command_doctor(_args: argparse.Namespace) -> int:
+    try:
+        paths = ensure_home(get_paths())
+    except OSError as exc:
+        eprint(f"home: error: {exc}")
+        return 1
+
+    checks: list[tuple[str, str, str]] = []
+    checks.append(("home", "ok", f"{paths.home} mode {_mode(paths.home)}"))
+
+    if paths.db.exists():
+        try:
+            conn = sqlite3.connect(f"file:{paths.db}?mode=ro", uri=True)
+            try:
+                version = conn.execute(
+                    "SELECT value FROM meta WHERE key = 'schema_version'"
+                ).fetchone()
+            finally:
+                conn.close()
+            detail = f"{paths.db} mode {_mode(paths.db)}"
+            if version:
+                detail += f" schema_version {version[0]}"
+            checks.append(("database", "ok", detail))
+        except sqlite3.Error as exc:
+            checks.append(("database", "error", f"{paths.db}: {exc}"))
+    else:
+        checks.append(("database", "info", f"{paths.db} does not exist yet"))
+
+    pid_detail = paths.pid.read_text(encoding="utf-8").strip() if paths.pid.exists() else "missing"
+    checks.append(("pid", "ok" if paths.pid.exists() else "info", str(pid_detail)))
+
+    try:
+        data = client().request("ping")
+    except DaemonNotRunning:
+        checks.append(("daemon", "warn", NOT_RUNNING))
+    except PeerpostClientError as exc:
+        checks.append(("daemon", "error", str(exc)))
+    else:
+        checks.append(("daemon", "ok", f"running pid {data.get('pid')}"))
+
+    checks.append(("socket", "ok" if paths.socket.exists() else "info", str(paths.socket)))
+
+    exit_code = 0
+    for name, status, detail in checks:
+        print(f"{name}: {status}: {detail}")
+        if status == "error":
+            exit_code = 1
+    if exit_code == 0:
+        has_warning = any(status == "warn" for _, status, _ in checks)
+        print(f"status: {'warnings' if has_warning else 'ok'}")
+    return exit_code
+
+
+def snippet_for(adapter: str, agent: str, team: str) -> str:
+    if adapter == "claude-code":
+        return (
+            "# Claude Code Monitor\n"
+            f"peerpost subscribe --agent {agent} --team {team} --include-backlog --format monitor"
+        )
+    if adapter == "codex":
+        return (
+            "# Codex Stop hook command\n"
+            f"peerpost drain --agent {agent} --team {team} --format codex-hook"
+        )
+    if adapter == "copilot":
+        return (
+            "# Copilot agentStop hook command\n"
+            f"peerpost drain --agent {agent} --team {team} --format copilot-hook"
+        )
+    if adapter == "antigravity":
+        return (
+            "# Antigravity/local generic receive command\n"
+            f"peerpost drain --agent {agent} --team {team} --format plain\n"
+            f"# Or keep a live local monitor open:\n"
+            f"peerpost subscribe --agent {agent} --team {team} --format monitor"
+        )
+    return (
+        "# Generic local agent receive command\n"
+        f"peerpost drain --agent {agent} --team {team} --format plain\n"
+        f"# Or keep a live local monitor open:\n"
+        f"peerpost subscribe --agent {agent} --team {team} --format monitor"
+    )
+
+
+def command_install_snippets(args: argparse.Namespace) -> int:
+    adapters = SNIPPET_ADAPTERS if args.adapter == "all" else (args.adapter,)
+    blocks: list[str] = []
+    for adapter in adapters:
+        agent = args.agent or ("claude" if adapter == "claude-code" else adapter)
+        blocks.append(snippet_for(adapter, agent, args.team))
+    print("\n\n".join(blocks))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="peerpost")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -341,6 +444,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     paths = sub.add_parser("paths")
     paths.set_defaults(func=command_paths)
+
+    doctor = sub.add_parser("doctor")
+    doctor.set_defaults(func=command_doctor)
+
+    snippets = sub.add_parser("install-snippets", aliases=["snippets"])
+    snippets.add_argument(
+        "--adapter",
+        choices=[*SNIPPET_ADAPTERS, "all"],
+        default="all",
+        help="agent adapter snippet to print",
+    )
+    snippets.add_argument("--team", default="dev")
+    snippets.add_argument("--agent", help="override the agent id used in the snippet")
+    snippets.set_defaults(func=command_install_snippets)
 
     return parser
 

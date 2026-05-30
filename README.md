@@ -53,6 +53,12 @@ Inspect active paths:
 peerpost paths
 ```
 
+Check local setup:
+
+```sh
+peerpost doctor
+```
+
 ## Start The Daemon
 
 Foreground:
@@ -152,6 +158,26 @@ peerpost drain --agent copilot --team dev --format copilot-hook
 ```
 
 The output shape matches the Codex hook format.
+
+## Install Snippets
+
+peerpost can print copy/paste snippets for local agent configuration. It does not edit tool config files.
+
+```sh
+peerpost install-snippets --adapter all --team dev
+peerpost install-snippets --adapter codex --agent codex --team dev
+```
+
+`peerpost snippets` is an alias for `peerpost install-snippets`.
+
+Available adapters:
+
+- `claude-code`
+- `codex`
+- `copilot`
+- `antigravity`
+- `generic`
+- `all`
 
 ## Safety Model
 

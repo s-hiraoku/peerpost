@@ -128,6 +128,28 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(second.stdout, "")
 
+    def test_doctor_reports_running_daemon(self) -> None:
+        result = self.run_peerpost("doctor")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("home: ok:", result.stdout)
+        self.assertIn("daemon: ok: running pid", result.stdout)
+        self.assertIn("status: ok", result.stdout)
+
+    def test_install_snippets_prints_adapter_commands(self) -> None:
+        codex = self.run_peerpost(
+            "install-snippets", "--adapter", "codex", "--agent", "codex", "--team", "dev"
+        )
+        self.assertEqual(codex.returncode, 0, codex.stderr)
+        self.assertIn("Codex Stop hook command", codex.stdout)
+        self.assertIn("peerpost drain --agent codex --team dev --format codex-hook", codex.stdout)
+
+        all_snippets = self.run_peerpost("snippets", "--team", "dev")
+        self.assertEqual(all_snippets.returncode, 0, all_snippets.stderr)
+        self.assertIn("Claude Code Monitor", all_snippets.stdout)
+        self.assertIn("Copilot agentStop hook command", all_snippets.stdout)
+        self.assertIn("Antigravity/local generic receive command", all_snippets.stdout)
+        self.assertIn("Generic local agent receive command", all_snippets.stdout)
+
     def test_subscribe_receives_message_sent_after_subscription(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
