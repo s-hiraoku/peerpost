@@ -213,7 +213,15 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             targets = store.broadcast_targets(team, from_agent)
         else:
             targets = [self._require(request, "to_agent")]
-        message, targets = store.create_message(team, from_agent, body, targets)
+        message, targets = store.create_message(
+            team,
+            from_agent,
+            body,
+            targets,
+            kind=request.get("kind", "message"),
+            priority=request.get("priority", "normal"),
+            parent_id=request.get("parent_id"),
+        )
         delivered_now: list[str] = []
         for target in targets:
             payload = {**message, "to_agent": target, "status": "pending"}

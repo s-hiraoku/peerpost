@@ -53,6 +53,22 @@ class DbTest(unittest.TestCase):
         status = self.store.delivery_status(message["id"], "codex", "dev")
         self.assertEqual(status, "pending")
 
+    def test_send_stores_message_metadata(self) -> None:
+        message, _ = self.store.create_message(
+            "dev",
+            "claude",
+            "please check",
+            ["codex"],
+            kind="review",
+            priority="high",
+            parent_id="msg_parent",
+        )
+        drained = self.store.drain("codex", "dev")
+        self.assertEqual(drained[0].id, message["id"])
+        self.assertEqual(drained[0].kind, "review")
+        self.assertEqual(drained[0].priority, "high")
+        self.assertEqual(drained[0].parent_id, "msg_parent")
+
     def test_drain_returns_pending_and_marks_delivered(self) -> None:
         message, _ = self.store.create_message("dev", "claude", "hello", ["codex"])
         drained = self.store.drain("codex", "dev")

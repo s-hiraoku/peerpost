@@ -155,6 +155,9 @@ def command_send(args: argparse.Namespace) -> int:
         broadcast=args.broadcast,
         team=args.team,
         body=args.message,
+        kind=args.kind,
+        priority=args.priority,
+        parent_id=args.reply_to,
     )
     targets = ", ".join(data["targets"]) if data["targets"] else "(none)"
     print(f"sent {data['message']['id']} to {targets}")
@@ -385,6 +388,13 @@ def build_parser() -> argparse.ArgumentParser:
     target.add_argument("--to", dest="to_agent")
     target.add_argument("--broadcast", action="store_true")
     send.add_argument("--team", required=True)
+    send.add_argument("--kind", default="message")
+    send.add_argument(
+        "--priority",
+        choices=["low", "normal", "high", "urgent"],
+        default="normal",
+    )
+    send.add_argument("--reply-to", help="parent message id this message replies to")
     send.add_argument("message")
     send.set_defaults(func=command_send)
 

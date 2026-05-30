@@ -29,8 +29,16 @@ def format_plain(messages: Iterable[Any]) -> str:
     lines: list[str] = []
     for message in _messages(messages):
         body = indent_body(str(message["body"]), prefix="    ")
+        details: list[str] = []
+        if message.get("priority") and message.get("priority") != "normal":
+            details.append(f"priority={message['priority']}")
+        if message.get("kind") and message.get("kind") != "message":
+            details.append(f"kind={message['kind']}")
+        if message.get("parent_id"):
+            details.append(f"reply_to={message['parent_id']}")
+        suffix = f" ({', '.join(details)})" if details else ""
         lines.append(
-            f"[{message['created_at']}] {message['from_agent']} -> {message['to_agent']}: {body}"
+            f"[{message['created_at']}] {message['from_agent']} -> {message['to_agent']}{suffix}: {body}"
         )
     return "\n".join(lines)
 
@@ -40,7 +48,8 @@ def format_monitor(message: Any) -> str:
     body = indent_body(str(data["body"]), prefix="  ")
     return (
         f"peerpost | {data['created_at']} | {data['team']} | "
-        f"{data['from_agent']} \u2192 {data['to_agent']} | {body}"
+        f"{data['from_agent']} \u2192 {data['to_agent']} | "
+        f"{data.get('priority', 'normal')} | {body}"
     )
 
 

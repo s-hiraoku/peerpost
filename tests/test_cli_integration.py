@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import select
 import subprocess
@@ -127,6 +128,35 @@ class CliIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(second.stdout, "")
+
+    def test_send_reply_priority_metadata_is_drained_as_json(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--kind",
+            "review",
+            "--priority",
+            "high",
+            "--reply-to",
+            "msg_parent",
+            "Please review this follow-up.",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        drained = self.run_peerpost(
+            "drain", "--agent", "codex", "--team", "dev", "--format", "json"
+        )
+        self.assertEqual(drained.returncode, 0, drained.stderr)
+        messages = json.loads(drained.stdout)
+        self.assertEqual(messages[0]["kind"], "review")
+        self.assertEqual(messages[0]["priority"], "high")
+        self.assertEqual(messages[0]["parent_id"], "msg_parent")
 
     def test_doctor_reports_running_daemon(self) -> None:
         result = self.run_peerpost("doctor")

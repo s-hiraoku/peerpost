@@ -109,6 +109,14 @@ Broadcast sends to every registered agent in the team except the sender:
 peerpost send --from claude --broadcast --team dev "Standup notes are ready."
 ```
 
+Messages can carry lightweight coordination metadata:
+
+```sh
+peerpost send --from claude --to codex --team dev \
+  --kind review --priority high --reply-to msg_20260530T123456789Z_a1b2c3 \
+  "I left a follow-up on the middleware review."
+```
+
 ## Realtime Subscribe
 
 Shell A:
