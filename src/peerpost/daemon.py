@@ -156,10 +156,18 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                 self._require(request, "team"),
                 request.get("workspace"),
             )
+        if request_type == "leave":
+            removed = store.leave_agent(
+                self._require(request, "agent"),
+                self._require(request, "team"),
+            )
+            return {"removed": removed}
         if request_type == "agents":
             return store.list_agents(request.get("team"))
         if request_type == "send":
             return self._send(request)
+        if request_type == "reply":
+            return self._reply(request)
         if request_type == "inbox":
             messages = store.inbox(
                 self._require(request, "agent"),
@@ -202,6 +210,14 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         if request_type == "history":
             messages = store.history(request["team"], request.get("agent"), request.get("with_agent"))
             return [message.as_dict() for message in messages]
+        if request_type == "thread":
+            messages = store.thread(
+                self._require(request, "team"),
+                self._require(request, "message_id"),
+            )
+            if not messages:
+                raise RequestError("not_found", "message thread not found for this team")
+            return [message.as_dict() for message in messages]
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
     def _send(self, request: dict[str, Any]) -> dict[str, Any]:
@@ -222,6 +238,32 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             priority=request.get("priority", "normal"),
             parent_id=request.get("parent_id"),
         )
+        return self._deliver_to_live_targets(message, targets, team)
+
+    def _reply(self, request: dict[str, Any]) -> dict[str, Any]:
+        store = self.server.store
+        team = self._require(request, "team")
+        from_agent = self._require(request, "from_agent")
+        parent_id = self._require(request, "message_id")
+        body = self._require(request, "body")
+        parent = store.get_message_for_agent(parent_id, from_agent, team)
+        if parent is None:
+            raise RequestError("not_found", "message not found for this agent/team")
+        message, targets = store.create_message(
+            team,
+            from_agent,
+            body,
+            [parent.from_agent],
+            kind=request.get("kind", "reply"),
+            priority=request.get("priority", "normal"),
+            parent_id=parent_id,
+        )
+        return self._deliver_to_live_targets(message, targets, team)
+
+    def _deliver_to_live_targets(
+        self, message: dict[str, Any], targets: list[str], team: str
+    ) -> dict[str, Any]:
+        store = self.server.store
         delivered_now: list[str] = []
         for target in targets:
             payload = {**message, "to_agent": target, "status": "pending"}

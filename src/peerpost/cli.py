@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
 from .formatters import format_drain, format_json, format_monitor, format_plain
 from .paths import ensure_home, get_paths
@@ -132,18 +133,36 @@ def command_join(args: argparse.Namespace) -> int:
         team=args.team,
         workspace=args.workspace,
     )
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
     print(f"joined {data['id']} ({data['agent_type']}) in team {data['team']}")
     return 0
 
 
 def command_agents(args: argparse.Namespace) -> int:
     agents = client().request("agents", team=args.team)
+    if args.output_format == "json":
+        print(format_json(agents))
+        return 0
     if not agents:
         print("no agents registered")
         return 0
     for agent in agents:
         workspace = f" {agent['workspace']}" if agent.get("workspace") else ""
         print(f"{agent['team']}/{agent['id']} {agent['agent_type']}{workspace}")
+    return 0
+
+
+def command_leave(args: argparse.Namespace) -> int:
+    data = client().request("leave", agent=args.agent, team=args.team)
+    if args.output_format == "json":
+        print(format_json({"agent": args.agent, "team": args.team, **data}))
+        return 0
+    if data["removed"]:
+        print(f"left {args.agent} from team {args.team}")
+    else:
+        print(f"{args.agent} was not registered in team {args.team}")
     return 0
 
 
@@ -159,8 +178,31 @@ def command_send(args: argparse.Namespace) -> int:
         priority=args.priority,
         parent_id=args.reply_to,
     )
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
     targets = ", ".join(data["targets"]) if data["targets"] else "(none)"
     print(f"sent {data['message']['id']} to {targets}")
+    if data.get("delivered_now"):
+        print(f"delivered now: {', '.join(data['delivered_now'])}")
+    return 0
+
+
+def command_reply(args: argparse.Namespace) -> int:
+    data = client().request(
+        "reply",
+        from_agent=args.from_agent,
+        team=args.team,
+        message_id=args.message_id,
+        body=args.message,
+        kind=args.kind,
+        priority=args.priority,
+    )
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
+    targets = ", ".join(data["targets"]) if data["targets"] else "(none)"
+    print(f"sent {data['message']['id']} in reply to {args.message_id} to {targets}")
     if data.get("delivered_now"):
         print(f"delivered now: {', '.join(data['delivered_now'])}")
     return 0
@@ -179,7 +221,7 @@ def command_inbox(args: argparse.Namespace) -> int:
     messages = client().request(
         "inbox", agent=args.agent, team=args.team, include_all=args.include_all
     )
-    print_messages(messages)
+    print_messages(messages, args.output_format)
     return 0
 
 
@@ -187,7 +229,10 @@ def command_read(args: argparse.Namespace) -> int:
     message = client().request(
         "read", message_id=args.message_id, agent=args.agent, team=args.team
     )
-    print(format_plain([message]))
+    if args.output_format == "json":
+        print(format_json(message))
+    else:
+        print(format_plain([message]))
     return 0
 
 
@@ -195,6 +240,9 @@ def command_ack(args: argparse.Namespace) -> int:
     data = client().request(
         "ack", message_ids=args.message_ids, agent=args.agent, team=args.team
     )
+    if args.output_format == "json":
+        print(format_json({"message_ids": args.message_ids, "agent": args.agent, "team": args.team, **data}))
+        return 0
     print(f"acknowledged {data['updated']} delivery row(s)")
     return 0
 
@@ -203,6 +251,9 @@ def command_done(args: argparse.Namespace) -> int:
     data = client().request(
         "done", message_ids=args.message_ids, agent=args.agent, team=args.team
     )
+    if args.output_format == "json":
+        print(format_json({"message_ids": args.message_ids, "agent": args.agent, "team": args.team, **data}))
+        return 0
     print(f"marked done {data['updated']} delivery row(s)")
     return 0
 
@@ -244,7 +295,13 @@ def command_history(args: argparse.Namespace) -> int:
     messages = client().request(
         "history", team=args.team, agent=args.agent, with_agent=args.with_agent
     )
-    print_messages(messages)
+    print_messages(messages, args.output_format)
+    return 0
+
+
+def command_thread(args: argparse.Namespace) -> int:
+    messages = client().request("thread", team=args.team, message_id=args.message_id)
+    print_messages(messages, args.output_format)
     return 0
 
 
@@ -361,6 +418,7 @@ def command_install_snippets(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="peerpost")
+    parser.add_argument("--version", action="version", version=f"peerpost {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     daemon = sub.add_parser("daemon")
@@ -376,11 +434,19 @@ def build_parser() -> argparse.ArgumentParser:
     join.add_argument("--type", dest="agent_type", required=True)
     join.add_argument("--team", required=True)
     join.add_argument("--workspace")
+    join.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     join.set_defaults(func=command_join)
 
     agents = sub.add_parser("agents")
     agents.add_argument("--team")
+    agents.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     agents.set_defaults(func=command_agents)
+
+    leave = sub.add_parser("leave")
+    leave.add_argument("--agent", required=True)
+    leave.add_argument("--team", required=True)
+    leave.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    leave.set_defaults(func=command_leave)
 
     send = sub.add_parser("send")
     send.add_argument("--from", dest="from_agent", required=True)
@@ -395,31 +461,50 @@ def build_parser() -> argparse.ArgumentParser:
         default="normal",
     )
     send.add_argument("--reply-to", help="parent message id this message replies to")
+    send.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     send.add_argument("message")
     send.set_defaults(func=command_send)
+
+    reply = sub.add_parser("reply")
+    reply.add_argument("message_id")
+    reply.add_argument("--from", dest="from_agent", required=True)
+    reply.add_argument("--team", required=True)
+    reply.add_argument("--kind", default="reply")
+    reply.add_argument(
+        "--priority",
+        choices=["low", "normal", "high", "urgent"],
+        default="normal",
+    )
+    reply.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    reply.add_argument("message")
+    reply.set_defaults(func=command_reply)
 
     inbox = sub.add_parser("inbox")
     inbox.add_argument("--agent", required=True)
     inbox.add_argument("--team", required=True)
     inbox.add_argument("--all", dest="include_all", action="store_true")
+    inbox.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     inbox.set_defaults(func=command_inbox)
 
     read = sub.add_parser("read")
     read.add_argument("message_id")
     read.add_argument("--agent", required=True)
     read.add_argument("--team", required=True)
+    read.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     read.set_defaults(func=command_read)
 
     ack = sub.add_parser("ack")
     ack.add_argument("message_ids", nargs="+")
     ack.add_argument("--agent", required=True)
     ack.add_argument("--team", required=True)
+    ack.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     ack.set_defaults(func=command_ack)
 
     done = sub.add_parser("done")
     done.add_argument("message_ids", nargs="+")
     done.add_argument("--agent", required=True)
     done.add_argument("--team", required=True)
+    done.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     done.set_defaults(func=command_done)
 
     drain = sub.add_parser("drain")
@@ -450,7 +535,14 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument("--team", required=True)
     history.add_argument("--agent")
     history.add_argument("--with", dest="with_agent")
+    history.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     history.set_defaults(func=command_history)
+
+    thread = sub.add_parser("thread")
+    thread.add_argument("message_id")
+    thread.add_argument("--team", required=True)
+    thread.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    thread.set_defaults(func=command_thread)
 
     paths = sub.add_parser("paths")
     paths.set_defaults(func=command_paths)

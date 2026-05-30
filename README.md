@@ -6,12 +6,12 @@ It is designed for local peer-agent coordination between tools such as Claude Co
 
 ## Roadmap
 
-North Star: agents can safely contact each other through durable local peer messages.
+North Star: local CLI agents can safely coordinate through durable peer messages.
 
-- MVP: Claude Code and Codex CLI message exchange works through the local daemon.
-- v0.1: Claude, Codex, and Copilot adapters work.
-- v0.2: Antigravity/generic adapter support, `doctor`, and install snippets.
-- v1.0: stable local-first agent bus for development use.
+- MVP: complete. Claude Code and Codex CLI message exchange works through the local daemon.
+- v0.1: complete. Claude, Codex, and Copilot adapters work through monitor and hook formats.
+- v0.2: complete. Antigravity/generic snippets, `doctor`, and install snippets are included.
+- v1.0: complete. peerpost is a stable local-first agent bus for development use.
 
 ## What It Is Not
 
@@ -103,6 +103,12 @@ peerpost drain --agent codex --team dev --format plain
 
 The drain command prints the message from `claude` to `codex`. Running the same drain command again prints no pending messages because the first drain marks the delivery as delivered.
 
+Agents can leave a team without deleting message history:
+
+```sh
+peerpost leave --agent codex --team dev
+```
+
 Broadcast sends to every registered agent in the team except the sender:
 
 ```sh
@@ -115,6 +121,34 @@ Messages can carry lightweight coordination metadata:
 peerpost send --from claude --to codex --team dev \
   --kind review --priority high --reply-to msg_20260530T123456789Z_a1b2c3 \
   "I left a follow-up on the middleware review."
+```
+
+Reply to a message that was delivered to the replying agent:
+
+```sh
+peerpost reply msg_20260530T123456789Z_a1b2c3 \
+  --from codex --team dev --priority high \
+  "I reviewed it and left comments."
+```
+
+`reply` sends back to the original sender and sets `parent_id` automatically.
+
+Show the conversation around any message in a reply chain:
+
+```sh
+peerpost thread msg_20260530T123456789Z_a1b2c3 --team dev
+```
+
+Most commands used by automation support `--format json`:
+
+```sh
+peerpost join --agent codex --type codex --team dev --format json
+peerpost agents --team dev --format json
+peerpost send --from claude --to codex --team dev --format json "Question"
+peerpost inbox --agent codex --team dev --format json
+peerpost read msg_20260530T123456789Z_a1b2c3 --agent codex --team dev --format json
+peerpost ack msg_20260530T123456789Z_a1b2c3 --agent codex --team dev --format json
+peerpost done msg_20260530T123456789Z_a1b2c3 --agent codex --team dev --format json
 ```
 
 ## Realtime Subscribe

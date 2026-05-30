@@ -47,6 +47,12 @@ class DbTest(unittest.TestCase):
         self.assertEqual(agent["team"], "dev")
         self.assertEqual(agent["workspace"], "/tmp/work")
 
+    def test_leave_unregisters_agent(self) -> None:
+        self.store.join_agent("codex", "codex", "dev")
+        self.assertTrue(self.store.leave_agent("codex", "dev"))
+        self.assertIsNone(self.store.get_agent("codex", "dev"))
+        self.assertFalse(self.store.leave_agent("codex", "dev"))
+
     def test_send_creates_message_and_delivery(self) -> None:
         message, targets = self.store.create_message("dev", "claude", "hello", ["codex"])
         self.assertEqual(targets, ["codex"])
@@ -68,6 +74,26 @@ class DbTest(unittest.TestCase):
         self.assertEqual(drained[0].kind, "review")
         self.assertEqual(drained[0].priority, "high")
         self.assertEqual(drained[0].parent_id, "msg_parent")
+
+    def test_get_message_for_agent_does_not_mark_delivered(self) -> None:
+        message, _ = self.store.create_message("dev", "claude", "hello", ["codex"])
+        found = self.store.get_message_for_agent(message["id"], "codex", "dev")
+        self.assertIsNotNone(found)
+        self.assertEqual(found.id, message["id"])
+        self.assertEqual(self.store.delivery_status(message["id"], "codex", "dev"), "pending")
+
+    def test_thread_returns_root_and_descendants(self) -> None:
+        root, _ = self.store.create_message("dev", "claude", "root", ["codex"])
+        reply, _ = self.store.create_message(
+            "dev", "codex", "reply", ["claude"], kind="reply", parent_id=root["id"]
+        )
+        followup, _ = self.store.create_message(
+            "dev", "claude", "followup", ["codex"], kind="reply", parent_id=reply["id"]
+        )
+        self.store.create_message("dev", "copilot", "unrelated", ["codex"])
+
+        messages = self.store.thread("dev", reply["id"])
+        self.assertEqual([message.id for message in messages], [root["id"], reply["id"], followup["id"]])
 
     def test_drain_returns_pending_and_marks_delivered(self) -> None:
         message, _ = self.store.create_message("dev", "claude", "hello", ["codex"])
@@ -99,6 +125,13 @@ class DbTest(unittest.TestCase):
         self.assertEqual(deliveries, ["codex", "copilot"])
         self.assertEqual(self.store.delivery_status(message["id"], "codex", "dev"), "pending")
         self.assertEqual(self.store.delivery_status(message["id"], "copilot", "dev"), "pending")
+
+    def test_broadcast_excludes_agent_after_leave(self) -> None:
+        self.store.join_agent("claude", "claude-code", "dev")
+        self.store.join_agent("codex", "codex", "dev")
+        self.store.join_agent("copilot", "copilot", "dev")
+        self.store.leave_agent("copilot", "dev")
+        self.assertEqual(self.store.broadcast_targets("dev", "claude"), ["codex"])
 
 
 if __name__ == "__main__":

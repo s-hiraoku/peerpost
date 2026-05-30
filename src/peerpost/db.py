@@ -172,6 +172,13 @@ class Store:
             rows = self.conn.execute("SELECT * FROM agents ORDER BY team, id").fetchall()
         return [row_to_dict(row) for row in rows]
 
+    def leave_agent(self, agent_id: str, team: str) -> bool:
+        with self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM agents WHERE id = ? AND team = ?", (agent_id, team)
+            )
+        return cursor.rowcount > 0
+
     def create_message(
         self,
         team: str,
@@ -293,6 +300,37 @@ class Store:
             params.extend([agent, agent])
         return self._messages_query(" AND ".join(clauses), tuple(params))
 
+    def thread(self, team: str, message_id: str) -> list[Message]:
+        rows = self.conn.execute(
+            "SELECT id, parent_id FROM messages WHERE team = ? ORDER BY created_at, id",
+            (team,),
+        ).fetchall()
+        parents = {row["id"]: row["parent_id"] for row in rows}
+        if message_id not in parents:
+            return []
+
+        root = message_id
+        seen = {root}
+        while parents[root] in parents and parents[root] not in seen:
+            root = parents[root]
+            seen.add(root)
+
+        children: dict[str | None, list[str]] = {}
+        for child_id, parent_id in parents.items():
+            children.setdefault(parent_id, []).append(child_id)
+
+        thread_ids: list[str] = []
+        stack = [root]
+        while stack:
+            current = stack.pop()
+            thread_ids.append(current)
+            stack.extend(reversed(children.get(current, [])))
+
+        placeholders = ",".join("?" for _ in thread_ids)
+        return self._messages_query(
+            f"m.team = ? AND m.id IN ({placeholders})", tuple([team, *thread_ids])
+        )
+
     def read_message(self, message_id: str, agent_id: str, team: str) -> Message | None:
         messages = self._messages_query(
             "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)
@@ -301,6 +339,12 @@ class Store:
             return None
         self.mark_delivered([message_id], agent_id, team)
         return messages[0]
+
+    def get_message_for_agent(self, message_id: str, agent_id: str, team: str) -> Message | None:
+        messages = self._messages_query(
+            "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)
+        )
+        return messages[0] if messages else None
 
     def mark_delivered(self, message_ids: Iterable[str], agent_id: str, team: str) -> None:
         ids = list(message_ids)

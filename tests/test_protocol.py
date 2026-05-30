@@ -1,16 +1,35 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
 from peerpost.formatters import HOOK_SAFETY_PREAMBLE, format_hook
 from peerpost.protocol import ProtocolError, decode_json_line, encode_json_line
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProtocolTest(unittest.TestCase):
     def test_round_trip_json_line(self) -> None:
         payload = {"id": "req_1", "type": "send", "body": "hello"}
         self.assertEqual(decode_json_line(encode_json_line(payload)), payload)
+
+    def test_cli_version(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "peerpost.cli", "--version"],
+            cwd=ROOT,
+            env={"PYTHONPATH": str(ROOT / "src")},
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "peerpost 1.0.0")
 
     def test_decode_rejects_non_object_json(self) -> None:
         with self.assertRaises(ProtocolError):

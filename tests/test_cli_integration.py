@@ -158,6 +158,75 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(messages[0]["priority"], "high")
         self.assertEqual(messages[0]["parent_id"], "msg_parent")
 
+    def test_reply_sends_back_to_original_sender(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send", "--from", "claude", "--to", "codex", "--team", "dev", "Question for Codex"
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        parent_id = sent.stdout.split()[1]
+        reply = self.run_peerpost(
+            "reply",
+            parent_id,
+            "--from",
+            "codex",
+            "--team",
+            "dev",
+            "--priority",
+            "high",
+            "Answer from Codex",
+        )
+        self.assertEqual(reply.returncode, 0, reply.stderr)
+        self.assertIn(f"in reply to {parent_id} to claude", reply.stdout)
+
+        drained = self.run_peerpost(
+            "drain", "--agent", "claude", "--team", "dev", "--format", "json"
+        )
+        self.assertEqual(drained.returncode, 0, drained.stderr)
+        messages = json.loads(drained.stdout)
+        self.assertEqual(messages[0]["from_agent"], "codex")
+        self.assertEqual(messages[0]["to_agent"], "claude")
+        self.assertEqual(messages[0]["body"], "Answer from Codex")
+        self.assertEqual(messages[0]["kind"], "reply")
+        self.assertEqual(messages[0]["priority"], "high")
+        self.assertEqual(messages[0]["parent_id"], parent_id)
+
+    def test_thread_returns_conversation_chain(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send", "--from", "claude", "--to", "codex", "--team", "dev", "Question"
+        )
+        root_id = sent.stdout.split()[1]
+        reply = self.run_peerpost("reply", root_id, "--from", "codex", "--team", "dev", "Answer")
+        reply_id = reply.stdout.split()[1]
+
+        thread = self.run_peerpost("thread", reply_id, "--team", "dev", "--format", "json")
+        self.assertEqual(thread.returncode, 0, thread.stderr)
+        messages = json.loads(thread.stdout)
+        self.assertEqual([message["id"] for message in messages], [root_id, reply_id])
+        self.assertEqual(messages[1]["parent_id"], root_id)
+
+    def test_reply_rejects_message_not_delivered_to_agent(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send", "--from", "claude", "--to", "codex", "--team", "dev", "Question for Codex"
+        )
+        parent_id = sent.stdout.split()[1]
+        rejected = self.run_peerpost(
+            "reply",
+            parent_id,
+            "--from",
+            "claude",
+            "--team",
+            "dev",
+            "This should not work",
+        )
+        self.assertEqual(rejected.returncode, 1)
+        self.assertIn("message not found for this agent/team", rejected.stderr)
+
     def test_doctor_reports_running_daemon(self) -> None:
         result = self.run_peerpost("doctor")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -179,6 +248,91 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("Copilot agentStop hook command", all_snippets.stdout)
         self.assertIn("Antigravity/local generic receive command", all_snippets.stdout)
         self.assertIn("Generic local agent receive command", all_snippets.stdout)
+
+    def test_leave_unregisters_agent_and_excludes_from_broadcast(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        self.run_peerpost("join", "--agent", "copilot", "--type", "copilot", "--team", "dev")
+
+        left = self.run_peerpost("leave", "--agent", "copilot", "--team", "dev")
+        self.assertEqual(left.returncode, 0, left.stderr)
+        self.assertIn("left copilot from team dev", left.stdout)
+
+        agents = self.run_peerpost("agents", "--team", "dev")
+        self.assertEqual(agents.returncode, 0, agents.stderr)
+        self.assertIn("dev/claude", agents.stdout)
+        self.assertIn("dev/codex", agents.stdout)
+        self.assertNotIn("dev/copilot", agents.stdout)
+
+        sent = self.run_peerpost(
+            "send", "--from", "claude", "--broadcast", "--team", "dev", "broadcast"
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        self.assertIn("to codex", sent.stdout)
+        self.assertNotIn("copilot", sent.stdout)
+
+    def test_core_commands_support_json_output(self) -> None:
+        joined = self.run_peerpost(
+            "join",
+            "--agent",
+            "claude",
+            "--type",
+            "claude-code",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+        )
+        self.assertEqual(joined.returncode, 0, joined.stderr)
+        self.assertEqual(json.loads(joined.stdout)["id"], "claude")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+
+        agents = self.run_peerpost("agents", "--team", "dev", "--format", "json")
+        self.assertEqual(agents.returncode, 0, agents.stderr)
+        self.assertEqual([agent["id"] for agent in json.loads(agents.stdout)], ["claude", "codex"])
+
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "Question",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        sent_payload = json.loads(sent.stdout)
+        message_id = sent_payload["message"]["id"]
+        self.assertEqual(sent_payload["targets"], ["codex"])
+
+        inbox = self.run_peerpost("inbox", "--agent", "codex", "--team", "dev", "--format", "json")
+        self.assertEqual(inbox.returncode, 0, inbox.stderr)
+        self.assertEqual(json.loads(inbox.stdout)[0]["id"], message_id)
+
+        read = self.run_peerpost(
+            "read", message_id, "--agent", "codex", "--team", "dev", "--format", "json"
+        )
+        self.assertEqual(read.returncode, 0, read.stderr)
+        self.assertEqual(json.loads(read.stdout)["id"], message_id)
+
+        ack = self.run_peerpost(
+            "ack", message_id, "--agent", "codex", "--team", "dev", "--format", "json"
+        )
+        self.assertEqual(ack.returncode, 0, ack.stderr)
+        self.assertEqual(json.loads(ack.stdout)["updated"], 1)
+
+        done = self.run_peerpost(
+            "done", message_id, "--agent", "codex", "--team", "dev", "--format", "json"
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout)["updated"], 1)
+
+        left = self.run_peerpost("leave", "--agent", "codex", "--team", "dev", "--format", "json")
+        self.assertEqual(left.returncode, 0, left.stderr)
+        self.assertTrue(json.loads(left.stdout)["removed"])
 
     def test_subscribe_receives_message_sent_after_subscription(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
