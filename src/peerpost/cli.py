@@ -1,0 +1,364 @@
+"""Command-line interface for peerpost."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import select
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
+from .formatters import format_drain, format_json, format_monitor, format_plain
+from .paths import ensure_home, get_paths
+
+
+KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"}
+HOOK_FORMATS = {"codex-hook", "copilot-hook"}
+
+
+def eprint(message: str) -> None:
+    print(message, file=sys.stderr)
+
+
+def client() -> PeerpostClient:
+    return PeerpostClient()
+
+
+def read_hook_input() -> dict[str, Any]:
+    if sys.stdin.isatty():
+        return {}
+    try:
+        ready, _, _ = select.select([sys.stdin], [], [], 0)
+    except (OSError, ValueError):
+        ready = [sys.stdin]
+    if not ready:
+        return {}
+    try:
+        raw = sys.stdin.read()
+    except OSError:
+        return {}
+    if not raw.strip():
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _contains_repeat_stop(payload: Any) -> bool:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            normalized = key.replace("-", "_").lower()
+            if normalized in {
+                "stop_hook_active",
+                "agent_stop_active",
+                "agentstopactive",
+                "copilot_stop_active",
+                "copilot_agent_stop_active",
+                "copilotagentstopactive",
+            } and value is True:
+                return True
+            if _contains_repeat_stop(value):
+                return True
+    elif isinstance(payload, list):
+        return any(_contains_repeat_stop(item) for item in payload)
+    return False
+
+
+def command_daemon(args: argparse.Namespace) -> int:
+    paths = ensure_home(get_paths())
+    if args.daemon_command == "start":
+        if args.foreground:
+            from .daemon import serve_foreground
+
+            serve_foreground(paths)
+            return 0
+        try:
+            data = client().request("ping")
+        except DaemonNotRunning:
+            data = None
+        if data:
+            print(f"peerpostd is running (pid {data.get('pid')})")
+            return 0
+        log = paths.log.open("ab")
+        argv = [sys.executable, "-m", "peerpost.daemon", "--foreground"]
+        subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+        for _ in range(30):
+            try:
+                data = client().request("ping")
+            except DaemonNotRunning:
+                time.sleep(0.1)
+                continue
+            print(f"peerpostd started (pid {data.get('pid')})")
+            return 0
+        eprint("failed to start peerpostd")
+        return 1
+    if args.daemon_command == "status":
+        pid_text = paths.pid.read_text(encoding="utf-8").strip() if paths.pid.exists() else "unknown"
+        try:
+            data = client().request("ping")
+        except DaemonNotRunning:
+            print(f"peerpostd is not running (pid file: {pid_text})")
+            return 1
+        print(f"peerpostd is running (pid {data.get('pid')}, pid file: {pid_text})")
+        return 0
+    if args.daemon_command == "stop":
+        try:
+            data = client().request("shutdown")
+        except DaemonNotRunning:
+            eprint(NOT_RUNNING)
+            return 1
+        print(f"peerpostd stopping (pid {data.get('pid')})")
+        return 0
+    eprint("unknown daemon command")
+    return 2
+
+
+def command_join(args: argparse.Namespace) -> int:
+    if args.agent_type not in KNOWN_AGENT_TYPES:
+        eprint(f"warning: unknown agent type '{args.agent_type}', allowing it")
+    data = client().request(
+        "join",
+        agent=args.agent,
+        agent_type=args.agent_type,
+        team=args.team,
+        workspace=args.workspace,
+    )
+    print(f"joined {data['id']} ({data['agent_type']}) in team {data['team']}")
+    return 0
+
+
+def command_agents(args: argparse.Namespace) -> int:
+    agents = client().request("agents", team=args.team)
+    if not agents:
+        print("no agents registered")
+        return 0
+    for agent in agents:
+        workspace = f" {agent['workspace']}" if agent.get("workspace") else ""
+        print(f"{agent['team']}/{agent['id']} {agent['agent_type']}{workspace}")
+    return 0
+
+
+def command_send(args: argparse.Namespace) -> int:
+    data = client().request(
+        "send",
+        from_agent=args.from_agent,
+        to_agent=args.to_agent,
+        broadcast=args.broadcast,
+        team=args.team,
+        body=args.message,
+    )
+    targets = ", ".join(data["targets"]) if data["targets"] else "(none)"
+    print(f"sent {data['message']['id']} to {targets}")
+    if data.get("delivered_now"):
+        print(f"delivered now: {', '.join(data['delivered_now'])}")
+    return 0
+
+
+def print_messages(messages: list[dict[str, Any]], output_format: str = "plain") -> None:
+    if output_format == "json":
+        print(format_json(messages))
+    else:
+        text = format_plain(messages)
+        if text:
+            print(text)
+
+
+def command_inbox(args: argparse.Namespace) -> int:
+    messages = client().request(
+        "inbox", agent=args.agent, team=args.team, include_all=args.include_all
+    )
+    print_messages(messages)
+    return 0
+
+
+def command_read(args: argparse.Namespace) -> int:
+    message = client().request(
+        "read", message_id=args.message_id, agent=args.agent, team=args.team
+    )
+    print(format_plain([message]))
+    return 0
+
+
+def command_ack(args: argparse.Namespace) -> int:
+    data = client().request(
+        "ack", message_ids=args.message_ids, agent=args.agent, team=args.team
+    )
+    print(f"acknowledged {data['updated']} delivery row(s)")
+    return 0
+
+
+def command_done(args: argparse.Namespace) -> int:
+    data = client().request(
+        "done", message_ids=args.message_ids, agent=args.agent, team=args.team
+    )
+    print(f"marked done {data['updated']} delivery row(s)")
+    return 0
+
+
+def command_drain(args: argparse.Namespace) -> int:
+    if args.output_format in HOOK_FORMATS and _contains_repeat_stop(read_hook_input()):
+        print("{}")
+        return 0
+    try:
+        messages = client().request(
+            "drain", agent=args.agent, team=args.team, limit=args.limit
+        )
+    except DaemonNotRunning:
+        if args.output_format in HOOK_FORMATS:
+            print("{}")
+            return 0
+        raise
+    output = format_drain(messages, args.output_format)
+    if output:
+        print(output)
+    return 0
+
+
+def command_subscribe(args: argparse.Namespace) -> int:
+    for event in client().subscribe(args.agent, args.team, include_backlog=args.include_backlog):
+        if event.get("event") != "message":
+            continue
+        message = event["message"]
+        if args.output_format == "json":
+            print(format_json(message), flush=True)
+        elif args.output_format == "monitor":
+            print(format_monitor(message), flush=True)
+        else:
+            print(format_plain([message]), flush=True)
+    return 0
+
+
+def command_history(args: argparse.Namespace) -> int:
+    messages = client().request(
+        "history", team=args.team, agent=args.agent, with_agent=args.with_agent
+    )
+    print_messages(messages)
+    return 0
+
+
+def command_paths(_args: argparse.Namespace) -> int:
+    paths = get_paths()
+    print(f"home: {paths.home}")
+    print(f"db: {paths.db}")
+    print(f"socket: {paths.socket}")
+    print(f"pid: {paths.pid}")
+    print(f"log: {paths.log}")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="peerpost")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    daemon = sub.add_parser("daemon")
+    daemon_sub = daemon.add_subparsers(dest="daemon_command", required=True)
+    start = daemon_sub.add_parser("start")
+    start.add_argument("--foreground", action="store_true")
+    daemon_sub.add_parser("status")
+    daemon_sub.add_parser("stop")
+    daemon.set_defaults(func=command_daemon)
+
+    join = sub.add_parser("join")
+    join.add_argument("--agent", required=True)
+    join.add_argument("--type", dest="agent_type", required=True)
+    join.add_argument("--team", required=True)
+    join.add_argument("--workspace")
+    join.set_defaults(func=command_join)
+
+    agents = sub.add_parser("agents")
+    agents.add_argument("--team")
+    agents.set_defaults(func=command_agents)
+
+    send = sub.add_parser("send")
+    send.add_argument("--from", dest="from_agent", required=True)
+    target = send.add_mutually_exclusive_group(required=True)
+    target.add_argument("--to", dest="to_agent")
+    target.add_argument("--broadcast", action="store_true")
+    send.add_argument("--team", required=True)
+    send.add_argument("message")
+    send.set_defaults(func=command_send)
+
+    inbox = sub.add_parser("inbox")
+    inbox.add_argument("--agent", required=True)
+    inbox.add_argument("--team", required=True)
+    inbox.add_argument("--all", dest="include_all", action="store_true")
+    inbox.set_defaults(func=command_inbox)
+
+    read = sub.add_parser("read")
+    read.add_argument("message_id")
+    read.add_argument("--agent", required=True)
+    read.add_argument("--team", required=True)
+    read.set_defaults(func=command_read)
+
+    ack = sub.add_parser("ack")
+    ack.add_argument("message_ids", nargs="+")
+    ack.add_argument("--agent", required=True)
+    ack.add_argument("--team", required=True)
+    ack.set_defaults(func=command_ack)
+
+    done = sub.add_parser("done")
+    done.add_argument("message_ids", nargs="+")
+    done.add_argument("--agent", required=True)
+    done.add_argument("--team", required=True)
+    done.set_defaults(func=command_done)
+
+    drain = sub.add_parser("drain")
+    drain.add_argument("--agent", required=True)
+    drain.add_argument("--team", required=True)
+    drain.add_argument("--limit", type=int, default=20)
+    drain.add_argument(
+        "--format",
+        dest="output_format",
+        choices=["plain", "json", "codex-hook", "copilot-hook"],
+        default="plain",
+    )
+    drain.set_defaults(func=command_drain)
+
+    subscribe = sub.add_parser("subscribe")
+    subscribe.add_argument("--agent", required=True)
+    subscribe.add_argument("--team", required=True)
+    subscribe.add_argument("--include-backlog", action="store_true")
+    subscribe.add_argument(
+        "--format",
+        dest="output_format",
+        choices=["plain", "json", "monitor"],
+        default="plain",
+    )
+    subscribe.set_defaults(func=command_subscribe)
+
+    history = sub.add_parser("history")
+    history.add_argument("--team", required=True)
+    history.add_argument("--agent")
+    history.add_argument("--with", dest="with_agent")
+    history.set_defaults(func=command_history)
+
+    paths = sub.add_parser("paths")
+    paths.set_defaults(func=command_paths)
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return args.func(args)
+    except DaemonNotRunning:
+        eprint(NOT_RUNNING)
+        return 1
+    except PeerpostClientError as exc:
+        eprint(str(exc))
+        return 1
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
