@@ -225,6 +225,8 @@ Available adapters:
 
 peerpost stores and transports text only. It never evaluates, interpolates, shells out from, or executes message bodies. Hook and monitor output strips ANSI and other terminal control characters while preserving ordinary text, newlines, and tabs.
 
+Daemon requests are newline-delimited JSON and are capped at 1 MiB per request line. Message bodies are capped at 200,000 characters.
+
 Hook reasons always begin with:
 
 ```text

@@ -7,6 +7,10 @@ import secrets
 from typing import Any, BinaryIO
 
 
+MAX_JSON_LINE_BYTES = 1024 * 1024
+MAX_BODY_CHARS = 200_000
+
+
 class ProtocolError(ValueError):
     pass
 

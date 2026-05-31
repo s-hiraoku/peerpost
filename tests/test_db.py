@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import os
 import sqlite3
 import tempfile
@@ -58,6 +59,18 @@ class DbTest(unittest.TestCase):
         self.assertEqual(targets, ["codex"])
         status = self.store.delivery_status(message["id"], "codex", "dev")
         self.assertEqual(status, "pending")
+
+    def test_concurrent_sends_are_serialized(self) -> None:
+        def send(index: int) -> str:
+            message, _ = self.store.create_message("dev", f"agent-{index}", "hello", ["codex"])
+            return message["id"]
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            message_ids = list(executor.map(send, range(50)))
+
+        self.assertEqual(len(set(message_ids)), 50)
+        drained = self.store.drain("codex", "dev", limit=100)
+        self.assertEqual(len(drained), 50)
 
     def test_send_stores_message_metadata(self) -> None:
         message, _ = self.store.create_message(

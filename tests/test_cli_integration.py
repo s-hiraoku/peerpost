@@ -10,7 +10,8 @@ import time
 import unittest
 from pathlib import Path
 
-from peerpost.client import DaemonNotRunning, PeerpostClient
+from peerpost.client import DaemonNotRunning, PeerpostClient, PeerpostClientError
+from peerpost.protocol import MAX_BODY_CHARS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -333,6 +334,17 @@ class CliIntegrationTest(unittest.TestCase):
         left = self.run_peerpost("leave", "--agent", "codex", "--team", "dev", "--format", "json")
         self.assertEqual(left.returncode, 0, left.stderr)
         self.assertTrue(json.loads(left.stdout)["removed"])
+
+    def test_daemon_rejects_oversized_message_body(self) -> None:
+        peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])
+        with self.assertRaisesRegex(PeerpostClientError, f"body exceeds {MAX_BODY_CHARS}"):
+            peerpost.request(
+                "send",
+                from_agent="claude",
+                to_agent="codex",
+                team="dev",
+                body="x" * (MAX_BODY_CHARS + 1),
+            )
 
     def test_subscribe_receives_message_sent_after_subscription(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")

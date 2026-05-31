@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +28,14 @@ def make_message_id() -> str:
 
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {key: row[key] for key in row.keys()}
+
+
+def locked_method(method):
+    def wrapper(self: "Store", *args: Any, **kwargs: Any):
+        with self.lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 @dataclass(frozen=True)
@@ -135,10 +144,13 @@ def migrate(conn: sqlite3.Connection) -> None:
 class Store:
     def __init__(self, conn: sqlite3.Connection | None = None):
         self.conn = conn or connect()
+        self.lock = threading.RLock()
 
+    @locked_method
     def close(self) -> None:
         self.conn.close()
 
+    @locked_method
     def join_agent(
         self, agent_id: str, agent_type: str, team: str, workspace: str | None = None
     ) -> dict[str, Any]:
@@ -157,12 +169,14 @@ class Store:
             )
         return self.get_agent(agent_id, team) or {}
 
+    @locked_method
     def get_agent(self, agent_id: str, team: str) -> dict[str, Any] | None:
         row = self.conn.execute(
             "SELECT * FROM agents WHERE id = ? AND team = ?", (agent_id, team)
         ).fetchone()
         return row_to_dict(row) if row else None
 
+    @locked_method
     def list_agents(self, team: str | None = None) -> list[dict[str, Any]]:
         if team:
             rows = self.conn.execute(
@@ -172,6 +186,7 @@ class Store:
             rows = self.conn.execute("SELECT * FROM agents ORDER BY team, id").fetchall()
         return [row_to_dict(row) for row in rows]
 
+    @locked_method
     def leave_agent(self, agent_id: str, team: str) -> bool:
         with self.conn:
             cursor = self.conn.execute(
@@ -179,6 +194,7 @@ class Store:
             )
         return cursor.rowcount > 0
 
+    @locked_method
     def create_message(
         self,
         team: str,
@@ -236,12 +252,14 @@ class Store:
             unique_targets,
         )
 
+    @locked_method
     def broadcast_targets(self, team: str, from_agent: str) -> list[str]:
         rows = self.conn.execute(
             "SELECT id FROM agents WHERE team = ? AND id != ? ORDER BY id", (team, from_agent)
         ).fetchall()
         return [row["id"] for row in rows]
 
+    @locked_method
     def _messages_query(self, where_sql: str, params: tuple[Any, ...]) -> list[Message]:
         rows = self.conn.execute(
             f"""
@@ -257,6 +275,7 @@ class Store:
         ).fetchall()
         return [Message.from_row(row) for row in rows]
 
+    @locked_method
     def pending_messages(self, agent_id: str, team: str, limit: int = 20) -> list[Message]:
         rows = self.conn.execute(
             """
@@ -273,11 +292,13 @@ class Store:
         ).fetchall()
         return [Message.from_row(row) for row in rows]
 
+    @locked_method
     def drain(self, agent_id: str, team: str, limit: int = 20) -> list[Message]:
         messages = self.pending_messages(agent_id, team, limit)
         self.mark_delivered([message.id for message in messages], agent_id, team)
         return messages
 
+    @locked_method
     def inbox(self, agent_id: str, team: str, include_all: bool = False) -> list[Message]:
         if include_all:
             return self._messages_query("d.team = ? AND d.to_agent = ?", (team, agent_id))
@@ -285,6 +306,7 @@ class Store:
             "d.team = ? AND d.to_agent = ? AND d.status != 'done'", (team, agent_id)
         )
 
+    @locked_method
     def history(
         self, team: str, agent: str | None = None, other_agent: str | None = None
     ) -> list[Message]:
@@ -300,6 +322,7 @@ class Store:
             params.extend([agent, agent])
         return self._messages_query(" AND ".join(clauses), tuple(params))
 
+    @locked_method
     def thread(self, team: str, message_id: str) -> list[Message]:
         rows = self.conn.execute(
             "SELECT id, parent_id FROM messages WHERE team = ? ORDER BY created_at, id",
@@ -331,6 +354,7 @@ class Store:
             f"m.team = ? AND m.id IN ({placeholders})", tuple([team, *thread_ids])
         )
 
+    @locked_method
     def read_message(self, message_id: str, agent_id: str, team: str) -> Message | None:
         messages = self._messages_query(
             "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)
@@ -340,12 +364,14 @@ class Store:
         self.mark_delivered([message_id], agent_id, team)
         return messages[0]
 
+    @locked_method
     def get_message_for_agent(self, message_id: str, agent_id: str, team: str) -> Message | None:
         messages = self._messages_query(
             "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)
         )
         return messages[0] if messages else None
 
+    @locked_method
     def mark_delivered(self, message_ids: Iterable[str], agent_id: str, team: str) -> None:
         ids = list(message_ids)
         if not ids:
@@ -361,6 +387,7 @@ class Store:
                 [(now, message_id, agent_id, team) for message_id in ids],
             )
 
+    @locked_method
     def ack(self, message_ids: Iterable[str], agent_id: str, team: str) -> int:
         ids = list(message_ids)
         if not ids:
@@ -381,6 +408,7 @@ class Store:
             )
             return self.conn.total_changes - before
 
+    @locked_method
     def done(self, message_ids: Iterable[str], agent_id: str, team: str) -> int:
         ids = list(message_ids)
         if not ids:
@@ -401,6 +429,7 @@ class Store:
             )
             return self.conn.total_changes - before
 
+    @locked_method
     def delivery_status(self, message_id: str, agent_id: str, team: str) -> str | None:
         row = self.conn.execute(
             """

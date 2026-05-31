@@ -15,7 +15,15 @@ from typing import Any
 
 from .db import Store
 from .paths import PeerpostPaths, ensure_home, get_paths, restrict_file
-from .protocol import decode_json_line, encode_json_line, error_response, ok_response
+from .protocol import (
+    MAX_BODY_CHARS,
+    MAX_JSON_LINE_BYTES,
+    ProtocolError,
+    decode_json_line,
+    encode_json_line,
+    error_response,
+    ok_response,
+)
 
 
 class RequestError(RuntimeError):
@@ -116,7 +124,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         request_id = None
         try:
-            line = self.rfile.readline()
+            line = self._read_request_line()
             if not line:
                 return
             request = decode_json_line(line)
@@ -131,15 +139,35 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         except RequestError as exc:
             self.wfile.write(encode_json_line(error_response(request_id, exc.code, str(exc))))
             self.wfile.flush()
+        except ProtocolError as exc:
+            self.wfile.write(encode_json_line(error_response(request_id, "bad_request", str(exc))))
+            self.wfile.flush()
         except Exception as exc:
             self.wfile.write(encode_json_line(error_response(request_id, "internal_error", str(exc))))
             self.wfile.flush()
+
+    def _read_request_line(self) -> bytes:
+        line = self.rfile.readline(MAX_JSON_LINE_BYTES + 1)
+        if len(line) > MAX_JSON_LINE_BYTES:
+            raise RequestError(
+                "request_too_large",
+                f"request JSON line exceeds {MAX_JSON_LINE_BYTES} bytes",
+            )
+        return line
 
     def _require(self, request: dict[str, Any], key: str) -> Any:
         value = request.get(key)
         if value in (None, ""):
             raise RequestError("bad_request", f"missing required field: {key}")
         return value
+
+    def _require_body(self, request: dict[str, Any]) -> str:
+        body = self._require(request, "body")
+        if not isinstance(body, str):
+            raise RequestError("bad_request", "body must be a string")
+        if len(body) > MAX_BODY_CHARS:
+            raise RequestError("request_too_large", f"body exceeds {MAX_BODY_CHARS} characters")
+        return body
 
     def _dispatch(self, request: dict[str, Any]) -> Any:
         request_type = request.get("type")
@@ -224,7 +252,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         store = self.server.store
         team = self._require(request, "team")
         from_agent = self._require(request, "from_agent")
-        body = self._require(request, "body")
+        body = self._require_body(request)
         if request.get("broadcast"):
             targets = store.broadcast_targets(team, from_agent)
         else:
@@ -245,7 +273,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         team = self._require(request, "team")
         from_agent = self._require(request, "from_agent")
         parent_id = self._require(request, "message_id")
-        body = self._require(request, "body")
+        body = self._require_body(request)
         parent = store.get_message_for_agent(parent_id, from_agent, team)
         if parent is None:
             raise RequestError("not_found", "message not found for this agent/team")
