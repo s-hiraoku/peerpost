@@ -127,6 +127,8 @@ Print all suggested snippets:
 peerpost install-snippets --adapter all --team dev
 ```
 
+For copy/paste setup details by agent, see [Adapter Setup](docs/adapters.md).
+
 Supported agent types include:
 
 - `claude-code`
