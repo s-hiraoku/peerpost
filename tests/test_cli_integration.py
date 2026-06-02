@@ -256,6 +256,27 @@ class CliIntegrationTest(unittest.TestCase):
         strict = self.run_peerpost("doctor", "--strict")
         self.assertEqual(strict.returncode, 1)
 
+    def test_logs_reports_daemon_events_without_message_body(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "secret body should not be logged",
+        )
+        result = self.run_peerpost("logs", "--tail", "20", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        text = "\n".join(payload["lines"])
+        self.assertIn("peerpostd starting", text)
+        self.assertIn("message stored id=msg_", text)
+        self.assertNotIn("secret body should not be logged", text)
+
     def test_install_snippets_prints_adapter_commands(self) -> None:
         codex = self.run_peerpost(
             "install-snippets", "--adapter", "codex", "--agent", "codex", "--team", "dev"

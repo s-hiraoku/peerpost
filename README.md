@@ -48,6 +48,12 @@ peerpost doctor --format json
 peerpost doctor --strict
 ```
 
+If the daemon starts but behavior looks wrong, inspect recent daemon events:
+
+```sh
+peerpost logs --tail 50
+```
+
 ## Minimal Agent-To-Agent Flow
 
 Register two local agents:
@@ -138,6 +144,7 @@ These are the main commands needed for day-to-day use:
 ```sh
 peerpost setup --start-daemon --team dev
 peerpost doctor
+peerpost logs --tail 50
 peerpost join --agent <id> --type <type> --team dev
 peerpost send --from <agent> --to <agent> --team dev "message"
 peerpost drain --agent <agent> --team dev
@@ -155,6 +162,7 @@ peerpost history --team dev --agent <agent>
 peerpost thread <message-id> --team dev
 peerpost leave --agent <agent> --team dev
 peerpost paths
+peerpost logs --tail 50
 ```
 
 Most automation-facing commands support `--format json`.

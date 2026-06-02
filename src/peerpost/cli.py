@@ -360,6 +360,25 @@ def command_paths(_args: argparse.Namespace) -> int:
     return 0
 
 
+def command_logs(args: argparse.Namespace) -> int:
+    paths = get_paths()
+    if not paths.log.exists():
+        if args.output_format == "json":
+            print(format_json({"path": str(paths.log), "lines": []}))
+        else:
+            print(f"no log file found: {paths.log}")
+        return 0
+    lines = paths.log.read_text(encoding="utf-8", errors="replace").splitlines()
+    if args.tail >= 0:
+        lines = lines[-args.tail :] if args.tail else []
+    if args.output_format == "json":
+        print(format_json({"path": str(paths.log), "lines": lines}))
+    else:
+        for line in lines:
+            print(line)
+    return 0
+
+
 def _mode(path: Path) -> str:
     try:
         return oct(path.stat().st_mode & 0o777)
@@ -714,6 +733,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     paths = sub.add_parser("paths")
     paths.set_defaults(func=command_paths)
+
+    logs = sub.add_parser("logs")
+    logs.add_argument("--tail", type=int, default=50)
+    logs.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    logs.set_defaults(func=command_logs)
 
     doctor = sub.add_parser("doctor")
     doctor.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")

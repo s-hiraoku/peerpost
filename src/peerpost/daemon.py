@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import socket
 import socketserver
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,23 @@ from .protocol import (
     error_response,
     ok_response,
 )
+
+
+LOGGER_NAME = "peerpostd"
+
+
+def configure_logging(paths: PeerpostPaths) -> logging.Logger:
+    logger = logging.getLogger(LOGGER_NAME)
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    handler = logging.FileHandler(paths.log, encoding="utf-8")
+    formatter = logging.Formatter("%(asctime)sZ %(levelname)s %(message)s", "%Y-%m-%dT%H:%M:%S")
+    formatter.converter = time.gmtime
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = False
+    restrict_file(paths.log)
+    return logger
 
 
 class RequestError(RuntimeError):
@@ -56,6 +75,7 @@ class PeerpostUnixServer(socketserver.ThreadingUnixStreamServer):
     def __init__(self, paths: PeerpostPaths):
         self.paths = paths
         ensure_home(paths)
+        self.logger = logging.getLogger(LOGGER_NAME)
         self._prepare_socket(paths.socket)
         self.store = Store()
         self.subscribers: dict[tuple[str, str], list[Subscriber]] = {}
@@ -66,6 +86,7 @@ class PeerpostUnixServer(socketserver.ThreadingUnixStreamServer):
             paths.socket.chmod(0o600)
         except OSError:
             pass
+        self.logger.info("peerpostd listening socket=%s db=%s", paths.socket, paths.db)
 
     def _prepare_socket(self, socket_path: Path) -> None:
         socket_path.parent.mkdir(parents=True, exist_ok=True)
@@ -113,6 +134,7 @@ class PeerpostUnixServer(socketserver.ThreadingUnixStreamServer):
         return delivered
 
     def cleanup(self) -> None:
+        self.logger.info("peerpostd cleanup socket=%s pid=%s", self.paths.socket, self.paths.pid)
         self.store.close()
         self.paths.socket.unlink(missing_ok=True)
         self.paths.pid.unlink(missing_ok=True)
@@ -123,6 +145,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
 
     def handle(self) -> None:
         request_id = None
+        request_type = None
         try:
             line = self._read_request_line()
             if not line:
@@ -136,13 +159,27 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             data = self._dispatch(request)
             self.wfile.write(encode_json_line(ok_response(request_id, data)))
             self.wfile.flush()
+            self.server.logger.info("request ok id=%s type=%s", request_id, request_type)
         except RequestError as exc:
+            self.server.logger.warning(
+                "request error id=%s type=%s code=%s message=%s",
+                request_id,
+                request_type,
+                exc.code,
+                exc,
+            )
             self.wfile.write(encode_json_line(error_response(request_id, exc.code, str(exc))))
             self.wfile.flush()
         except ProtocolError as exc:
+            self.server.logger.warning(
+                "request protocol_error id=%s type=%s message=%s", request_id, request_type, exc
+            )
             self.wfile.write(encode_json_line(error_response(request_id, "bad_request", str(exc))))
             self.wfile.flush()
         except Exception as exc:
+            self.server.logger.exception(
+                "request internal_error id=%s type=%s message=%s", request_id, request_type, exc
+            )
             self.wfile.write(encode_json_line(error_response(request_id, "internal_error", str(exc))))
             self.wfile.flush()
 
@@ -305,6 +342,14 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             if self.server.push_to_subscribers(team, target, payload):
                 store.mark_delivered([message["id"]], target, team)
                 delivered_now.append(target)
+        self.server.logger.info(
+            "message stored id=%s team=%s from=%s targets=%s delivered_now=%s",
+            message["id"],
+            team,
+            message["from_agent"],
+            ",".join(targets),
+            ",".join(delivered_now),
+        )
         return {"message": message, "targets": targets, "delivered_now": delivered_now}
 
     def _handle_subscribe(self, request: dict[str, Any]) -> None:
@@ -315,6 +360,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         self.wfile.flush()
         subscriber = Subscriber(team=team, agent=agent, sock=self.request, lock=threading.Lock())
         self.server.register_subscriber(subscriber)
+        self.server.logger.info("subscriber connected team=%s agent=%s", team, agent)
         try:
             if request.get("include_backlog"):
                 for message in self.server.store.pending_messages(agent, team, 1000):
@@ -331,6 +377,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                     break
         finally:
             self.server.unregister_subscriber(subscriber)
+            self.server.logger.info("subscriber disconnected team=%s agent=%s", team, agent)
 
     def _shutdown_later(self) -> None:
         self.server.shutdown_event.set()
@@ -344,6 +391,8 @@ def write_pid(paths: PeerpostPaths) -> None:
 
 def serve_foreground(paths: PeerpostPaths | None = None) -> None:
     paths = ensure_home(paths or get_paths())
+    logger = configure_logging(paths)
+    logger.info("peerpostd starting pid=%s", os.getpid())
     server = PeerpostUnixServer(paths)
     write_pid(paths)
 
@@ -356,6 +405,7 @@ def serve_foreground(paths: PeerpostPaths | None = None) -> None:
     try:
         server.serve_forever(poll_interval=0.25)
     finally:
+        logger.info("peerpostd stopping pid=%s", os.getpid())
         signal.signal(signal.SIGTERM, old_term)
         signal.signal(signal.SIGINT, old_int)
         server.server_close()
