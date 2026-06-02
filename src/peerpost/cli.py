@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,29 @@ def eprint(message: str) -> None:
 
 def client() -> PeerpostClient:
     return PeerpostClient()
+
+
+def daemon_ping() -> dict[str, Any] | None:
+    try:
+        return client().request("ping")
+    except DaemonNotRunning:
+        return None
+
+
+def start_daemon_background() -> dict[str, Any] | None:
+    paths = ensure_home(get_paths())
+    data = daemon_ping()
+    if data:
+        return data
+    log = paths.log.open("ab")
+    argv = [sys.executable, "-m", "peerpost.daemon", "--foreground"]
+    subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
+    for _ in range(30):
+        data = daemon_ping()
+        if data:
+            return data
+        time.sleep(0.1)
+    return None
 
 
 def read_hook_input() -> dict[str, Any]:
@@ -82,22 +106,12 @@ def command_daemon(args: argparse.Namespace) -> int:
 
             serve_foreground(paths)
             return 0
-        try:
-            data = client().request("ping")
-        except DaemonNotRunning:
-            data = None
+        data = daemon_ping()
         if data:
             print(f"peerpostd is running (pid {data.get('pid')})")
             return 0
-        log = paths.log.open("ab")
-        argv = [sys.executable, "-m", "peerpost.daemon", "--foreground"]
-        subprocess.Popen(argv, stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True)
-        for _ in range(30):
-            try:
-                data = client().request("ping")
-            except DaemonNotRunning:
-                time.sleep(0.1)
-                continue
+        data = start_daemon_background()
+        if data:
             print(f"peerpostd started (pid {data.get('pid')})")
             return 0
         eprint("failed to start peerpostd")
@@ -305,6 +319,36 @@ def command_thread(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_prune(args: argparse.Namespace) -> int:
+    before = (
+        args.before
+        or (datetime.now(UTC) - timedelta(days=args.older_than_days))
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    data = client().request(
+        "prune",
+        team=args.team,
+        before=before,
+        limit=args.limit,
+        apply=args.apply,
+    )
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
+    action = "deleted" if args.apply else "would delete"
+    print(
+        f"prune: {action} {data['matched'] if not args.apply else data['deleted']} "
+        f"done message(s) before {data['before']}"
+    )
+    if not args.apply:
+        print("dry run only; pass --apply to delete")
+    for message_id in data["message_ids"]:
+        print(message_id)
+    return 0
+
+
 def command_paths(_args: argparse.Namespace) -> int:
     paths = get_paths()
     print(f"home: {paths.home}")
@@ -413,6 +457,46 @@ def command_install_snippets(args: argparse.Namespace) -> int:
         agent = args.agent or ("claude" if adapter == "claude-code" else adapter)
         blocks.append(snippet_for(adapter, agent, args.team))
     print("\n\n".join(blocks))
+    return 0
+
+
+def command_setup(args: argparse.Namespace) -> int:
+    paths = ensure_home(get_paths())
+    daemon = start_daemon_background() if args.start_daemon else daemon_ping()
+    adapters = SNIPPET_ADAPTERS if args.adapter == "all" else (args.adapter,)
+    snippets = []
+    for adapter in adapters:
+        agent = args.agent or ("claude" if adapter == "claude-code" else adapter)
+        snippets.append({"adapter": adapter, "agent": agent, "snippet": snippet_for(adapter, agent, args.team)})
+
+    data = {
+        "home": str(paths.home),
+        "db": str(paths.db),
+        "socket": str(paths.socket),
+        "pid": str(paths.pid),
+        "log": str(paths.log),
+        "daemon": daemon or {"status": "not_running"},
+        "team": args.team,
+        "snippets": snippets,
+    }
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
+
+    print("peerpost setup")
+    print(f"home: {paths.home}")
+    print(f"db: {paths.db}")
+    print(f"socket: {paths.socket}")
+    if daemon:
+        print(f"daemon: running pid {daemon.get('pid')}")
+    else:
+        print("daemon: not running (start with: peerpost daemon start)")
+    if snippets:
+        print()
+        print("agent snippets:")
+        for item in snippets:
+            print()
+            print(item["snippet"])
     return 0
 
 
@@ -544,6 +628,15 @@ def build_parser() -> argparse.ArgumentParser:
     thread.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     thread.set_defaults(func=command_thread)
 
+    prune = sub.add_parser("prune")
+    prune.add_argument("--team")
+    prune.add_argument("--older-than-days", type=int, default=30)
+    prune.add_argument("--before", help="UTC ISO timestamp cutoff, e.g. 2026-06-01T00:00:00Z")
+    prune.add_argument("--limit", type=int, default=100)
+    prune.add_argument("--apply", action="store_true", help="delete matched messages")
+    prune.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    prune.set_defaults(func=command_prune)
+
     paths = sub.add_parser("paths")
     paths.set_defaults(func=command_paths)
 
@@ -560,6 +653,19 @@ def build_parser() -> argparse.ArgumentParser:
     snippets.add_argument("--team", default="dev")
     snippets.add_argument("--agent", help="override the agent id used in the snippet")
     snippets.set_defaults(func=command_install_snippets)
+
+    setup = sub.add_parser("setup")
+    setup.add_argument("--team", default="dev")
+    setup.add_argument(
+        "--adapter",
+        choices=[*SNIPPET_ADAPTERS, "all"],
+        default="all",
+        help="agent adapter snippets to print",
+    )
+    setup.add_argument("--agent", help="override the agent id used in snippets")
+    setup.add_argument("--start-daemon", action="store_true")
+    setup.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    setup.set_defaults(func=command_setup)
 
     return parser
 

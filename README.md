@@ -1,21 +1,14 @@
 # peerpost
 
-peerpost is a small local-first message bus for CLI agents running on the same machine. A single daemon, `peerpostd`, owns SQLite-backed message storage and delivery. The `peerpost` CLI talks to the daemon over a Unix domain socket.
+peerpost is a local-first message bus for CLI agents on the same machine.
 
-It is designed for local peer-agent coordination between tools such as Claude Code, Codex CLI, GitHub Copilot CLI, Antigravity CLI, and future local agents.
-
-## Roadmap
+It lets local agents such as Claude Code, Codex CLI, GitHub Copilot CLI, Antigravity CLI, and generic shell-based agents safely exchange durable peer messages through one local daemon.
 
 North Star: local CLI agents can safely coordinate through durable peer messages.
 
-- MVP: complete. Claude Code and Codex CLI message exchange works through the local daemon.
-- v0.1: complete. Claude, Codex, and Copilot adapters work through monitor and hook formats.
-- v0.2: complete. Antigravity/generic snippets, `doctor`, and install snippets are included.
-- v1.0: complete. peerpost is a stable local-first agent bus for development use.
-
 ## What It Is Not
 
-peerpost is not a terminal automation tool. It does not send keystrokes, control PTYs, execute received message bodies, or contact external network services. Message bodies are untrusted peer content.
+peerpost is not terminal automation. It does not send keystrokes, control PTYs, execute message bodies, or contact external network services. Message bodies are untrusted peer content.
 
 ## Install
 
@@ -25,95 +18,149 @@ Python 3.11 or newer is required.
 python -m pip install -e .
 ```
 
-This exposes:
+This installs:
 
 ```sh
 peerpost
 peerpostd
 ```
 
-## Paths
+## Fast Setup On This PC
 
-By default, peerpost stores state in:
-
-```text
-~/.local/state/peerpost
-```
-
-Override it with:
+Run setup once:
 
 ```sh
-export PEERPOST_HOME=/path/to/state
-export PEERPOST_SOCKET=/tmp/peerpost-$USER.sock
+peerpost setup --start-daemon --team dev
 ```
 
-Inspect active paths:
+This creates the local state directory, starts `peerpostd` if needed, prints the active paths, and shows copy/paste snippets for supported CLI agents. It does not edit Claude, Codex, Copilot, or Antigravity config files.
 
-```sh
-peerpost paths
-```
-
-Check local setup:
+Check the setup:
 
 ```sh
 peerpost doctor
 ```
 
-## Start The Daemon
+## Minimal Agent-To-Agent Flow
 
-Foreground:
-
-```sh
-peerpost daemon start --foreground
-```
-
-Background:
-
-```sh
-peerpost daemon start
-peerpost daemon status
-peerpost daemon stop
-```
-
-You can also run the daemon directly:
-
-```sh
-peerpostd --foreground
-```
-
-## Basic Flow
-
-Shell A:
-
-```sh
-export PEERPOST_HOME="$(mktemp -d)"
-export PEERPOST_SOCKET="/tmp/peerpost-demo-$USER.sock"
-peerpost daemon start --foreground
-```
-
-Shell B:
+Register two local agents:
 
 ```sh
 peerpost join --agent claude --type claude-code --team dev
 peerpost join --agent codex --type codex --team dev
-
-peerpost send --from claude --to codex --team dev "Please review the auth middleware."
-peerpost drain --agent codex --team dev --format plain
 ```
 
-The drain command prints the message from `claude` to `codex`. Running the same drain command again prints no pending messages because the first drain marks the delivery as delivered.
-
-Agents can leave a team without deleting message history:
+Send a message:
 
 ```sh
-peerpost leave --agent codex --team dev
+peerpost send --from claude --to codex --team dev "Please review the auth middleware."
 ```
+
+Receive pending messages:
+
+```sh
+peerpost drain --agent codex --team dev
+```
+
+Reply:
+
+```sh
+peerpost reply msg_20260530T123456789Z_a1b2c3 --from codex --team dev "Reviewed. I left comments."
+```
+
+Mark work done:
+
+```sh
+peerpost done msg_20260530T123456789Z_a1b2c3 --agent codex --team dev
+```
+
+## Live Receiving
+
+For an agent or monitor process that stays open:
+
+```sh
+peerpost subscribe --agent codex --team dev --format monitor
+```
+
+To include existing pending messages first:
+
+```sh
+peerpost subscribe --agent codex --team dev --include-backlog --format monitor
+```
+
+## Hook Integration
+
+Codex Stop hook command:
+
+```sh
+peerpost drain --agent codex --team dev --format codex-hook
+```
+
+Copilot `agentStop` hook command:
+
+```sh
+peerpost drain --agent copilot --team dev --format copilot-hook
+```
+
+Claude Code Monitor command:
+
+```sh
+peerpost subscribe --agent claude --team dev --include-backlog --format monitor
+```
+
+Print all suggested snippets:
+
+```sh
+peerpost install-snippets --adapter all --team dev
+```
+
+Supported agent types include:
+
+- `claude-code`
+- `codex`
+- `copilot`
+- `antigravity`
+- `generic`
+
+Unknown agent types are allowed with a warning.
+
+## Daily Commands
+
+These are the main commands needed for day-to-day use:
+
+```sh
+peerpost setup --start-daemon --team dev
+peerpost doctor
+peerpost join --agent <id> --type <type> --team dev
+peerpost send --from <agent> --to <agent> --team dev "message"
+peerpost drain --agent <agent> --team dev
+peerpost subscribe --agent <agent> --team dev --format monitor
+peerpost reply <message-id> --from <agent> --team dev "message"
+peerpost done <message-id> --agent <agent> --team dev
+```
+
+Useful but less frequent:
+
+```sh
+peerpost agents --team dev
+peerpost inbox --agent <agent> --team dev
+peerpost history --team dev --agent <agent>
+peerpost thread <message-id> --team dev
+peerpost leave --agent <agent> --team dev
+peerpost paths
+```
+
+Most automation-facing commands support `--format json`.
+
+## Broadcast
 
 Broadcast sends to every registered agent in the team except the sender:
 
 ```sh
 peerpost send --from claude --broadcast --team dev "Standup notes are ready."
 ```
+
+## Metadata
 
 Messages can carry lightweight coordination metadata:
 
@@ -123,107 +170,56 @@ peerpost send --from claude --to codex --team dev \
   "I left a follow-up on the middleware review."
 ```
 
-Reply to a message that was delivered to the replying agent:
+## Maintenance
+
+peerpost stores messages durably in SQLite. To see old completed messages that can be removed:
 
 ```sh
-peerpost reply msg_20260530T123456789Z_a1b2c3 \
-  --from codex --team dev --priority high \
-  "I reviewed it and left comments."
+peerpost prune --team dev --older-than-days 30
 ```
 
-`reply` sends back to the original sender and sets `parent_id` automatically.
-
-Show the conversation around any message in a reply chain:
+To actually delete matched completed messages:
 
 ```sh
-peerpost thread msg_20260530T123456789Z_a1b2c3 --team dev
+peerpost prune --team dev --older-than-days 30 --apply
 ```
 
-Most commands used by automation support `--format json`:
+`prune` only removes messages whose deliveries are all `done`.
+
+## Paths
+
+By default, peerpost stores state in:
+
+```text
+~/.local/state/peerpost
+```
+
+Override paths with:
 
 ```sh
-peerpost join --agent codex --type codex --team dev --format json
-peerpost agents --team dev --format json
-peerpost send --from claude --to codex --team dev --format json "Question"
-peerpost inbox --agent codex --team dev --format json
-peerpost read msg_20260530T123456789Z_a1b2c3 --agent codex --team dev --format json
-peerpost ack msg_20260530T123456789Z_a1b2c3 --agent codex --team dev --format json
-peerpost done msg_20260530T123456789Z_a1b2c3 --agent codex --team dev --format json
+export PEERPOST_HOME=/path/to/state
+export PEERPOST_SOCKET=/tmp/peerpost-$USER.sock
 ```
 
-## Realtime Subscribe
+Stored files:
 
-Shell A:
-
-```sh
-peerpost subscribe --agent codex --team dev --format monitor
+```text
+<PEERPOST_HOME>/peerpost.sqlite
+<PEERPOST_HOME>/peerpost.pid
+<PEERPOST_HOME>/peerpost.log
 ```
 
-Shell B:
+The default socket is:
 
-```sh
-peerpost send --from claude --to codex --team dev "Realtime ping"
+```text
+/tmp/peerpost-<uid>.sock
 ```
-
-Shell A immediately prints one monitor-formatted line.
-
-## Claude Code Monitor
-
-Claude Code can monitor peerpost with:
-
-```sh
-peerpost subscribe --agent claude --team dev --include-backlog --format monitor
-```
-
-## Codex Stop Hook
-
-Use this command from a Codex Stop hook:
-
-```sh
-peerpost drain --agent codex --team dev --format codex-hook
-```
-
-If there are no pending messages, it prints:
-
-```json
-{}
-```
-
-If there are pending messages, it prints JSON with `decision: "block"` and a safety-prefixed reason.
-
-## Copilot agentStop Hook
-
-Use this command from a Copilot `agentStop` hook:
-
-```sh
-peerpost drain --agent copilot --team dev --format copilot-hook
-```
-
-The output shape matches the Codex hook format.
-
-## Install Snippets
-
-peerpost can print copy/paste snippets for local agent configuration. It does not edit tool config files.
-
-```sh
-peerpost install-snippets --adapter all --team dev
-peerpost install-snippets --adapter codex --agent codex --team dev
-```
-
-`peerpost snippets` is an alias for `peerpost install-snippets`.
-
-Available adapters:
-
-- `claude-code`
-- `codex`
-- `copilot`
-- `antigravity`
-- `generic`
-- `all`
 
 ## Safety Model
 
-peerpost stores and transports text only. It never evaluates, interpolates, shells out from, or executes message bodies. Hook and monitor output strips ANSI and other terminal control characters while preserving ordinary text, newlines, and tabs.
+peerpost stores and transports text only. It never evaluates, interpolates, shells out from, or executes message bodies.
+
+Hook and monitor output strips ANSI and other terminal control characters while preserving ordinary text, newlines, and tabs.
 
 Daemon requests are newline-delimited JSON and are capped at 1 MiB per request line. Message bodies are capped at 200,000 characters.
 
@@ -243,5 +239,5 @@ For hook formats, peerpost reads hook JSON from stdin when available. If it dete
 - No encryption or authentication beyond local filesystem permissions.
 - No rich attachments.
 - No MCP server or web UI.
-- No automatic installation into Claude, Codex, Copilot, or Antigravity configuration files.
+- No automatic edits to Claude, Codex, Copilot, or Antigravity config files.
 - Direct sends do not require the recipient to be pre-registered; broadcasts only target registered agents.

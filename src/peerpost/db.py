@@ -355,6 +355,58 @@ class Store:
         )
 
     @locked_method
+    def prune_done(
+        self,
+        before: str,
+        team: str | None = None,
+        limit: int = 100,
+        apply: bool = False,
+    ) -> dict[str, Any]:
+        clauses = ["m.created_at < ?"]
+        params: list[Any] = [before]
+        if team:
+            clauses.append("m.team = ?")
+            params.append(team)
+        where_sql = " AND ".join(clauses)
+        rows = self.conn.execute(
+            f"""
+            SELECT m.id
+            FROM messages m
+            JOIN deliveries d ON d.message_id = m.id
+            WHERE {where_sql}
+            GROUP BY m.id
+            HAVING COUNT(d.message_id) > 0
+               AND SUM(CASE WHEN d.status != 'done' THEN 1 ELSE 0 END) = 0
+            ORDER BY m.created_at, m.id
+            LIMIT ?
+            """,
+            tuple([*params, limit]),
+        ).fetchall()
+        message_ids = [row["id"] for row in rows]
+        deleted = 0
+        if apply and message_ids:
+            placeholders = ",".join("?" for _ in message_ids)
+            with self.conn:
+                self.conn.execute(
+                    f"DELETE FROM deliveries WHERE message_id IN ({placeholders})",
+                    tuple(message_ids),
+                )
+                cursor = self.conn.execute(
+                    f"DELETE FROM messages WHERE id IN ({placeholders})",
+                    tuple(message_ids),
+                )
+                deleted = cursor.rowcount
+        return {
+            "before": before,
+            "team": team,
+            "limit": limit,
+            "dry_run": not apply,
+            "matched": len(message_ids),
+            "deleted": deleted,
+            "message_ids": message_ids,
+        }
+
+    @locked_method
     def read_message(self, message_id: str, agent_id: str, team: str) -> Message | None:
         messages = self._messages_query(
             "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)

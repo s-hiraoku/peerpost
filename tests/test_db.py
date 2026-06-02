@@ -129,6 +129,23 @@ class DbTest(unittest.TestCase):
         self.assertEqual(self.store.done([message["id"]], "codex", "dev"), 1)
         self.assertEqual(self.store.delivery_status(message["id"], "codex", "dev"), "done")
 
+    def test_prune_done_only_deletes_done_messages(self) -> None:
+        done_message, _ = self.store.create_message("dev", "claude", "done", ["codex"])
+        pending_message, _ = self.store.create_message("dev", "claude", "pending", ["codex"])
+        self.store.done([done_message["id"]], "codex", "dev")
+
+        dry_run = self.store.prune_done("9999-01-01T00:00:00Z", team="dev")
+        self.assertEqual(dry_run["matched"], 1)
+        self.assertEqual(dry_run["deleted"], 0)
+        self.assertEqual(dry_run["message_ids"], [done_message["id"]])
+        self.assertEqual(self.store.delivery_status(done_message["id"], "codex", "dev"), "done")
+
+        applied = self.store.prune_done("9999-01-01T00:00:00Z", team="dev", apply=True)
+        self.assertEqual(applied["matched"], 1)
+        self.assertEqual(applied["deleted"], 1)
+        self.assertIsNone(self.store.delivery_status(done_message["id"], "codex", "dev"))
+        self.assertEqual(self.store.delivery_status(pending_message["id"], "codex", "dev"), "pending")
+
     def test_broadcast_targets_all_agents_except_sender(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")
         self.store.join_agent("codex", "codex", "dev")

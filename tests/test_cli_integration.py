@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import select
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -334,6 +335,74 @@ class CliIntegrationTest(unittest.TestCase):
         left = self.run_peerpost("leave", "--agent", "codex", "--team", "dev", "--format", "json")
         self.assertEqual(left.returncode, 0, left.stderr)
         self.assertTrue(json.loads(left.stdout)["removed"])
+
+    def test_setup_reports_paths_daemon_and_snippets(self) -> None:
+        result = self.run_peerpost("setup", "--team", "dev", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["team"], "dev")
+        self.assertEqual(data["home"], self.env["PEERPOST_HOME"])
+        self.assertIn("pid", data["daemon"])
+        self.assertTrue(any(item["adapter"] == "codex" for item in data["snippets"]))
+
+    def test_prune_dry_run_and_apply(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "done work",
+        )
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        self.run_peerpost("done", message_id, "--agent", "codex", "--team", "dev")
+
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                "UPDATE messages SET created_at = ? WHERE id = ?",
+                ("2020-01-01T00:00:00Z", message_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        dry_run = self.run_peerpost(
+            "prune",
+            "--team",
+            "dev",
+            "--before",
+            "2021-01-01T00:00:00Z",
+            "--format",
+            "json",
+        )
+        self.assertEqual(dry_run.returncode, 0, dry_run.stderr)
+        dry_payload = json.loads(dry_run.stdout)
+        self.assertTrue(dry_payload["dry_run"])
+        self.assertEqual(dry_payload["matched"], 1)
+        self.assertEqual(dry_payload["deleted"], 0)
+
+        applied = self.run_peerpost(
+            "prune",
+            "--team",
+            "dev",
+            "--before",
+            "2021-01-01T00:00:00Z",
+            "--apply",
+            "--format",
+            "json",
+        )
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        apply_payload = json.loads(applied.stdout)
+        self.assertFalse(apply_payload["dry_run"])
+        self.assertEqual(apply_payload["deleted"], 1)
 
     def test_daemon_rejects_oversized_message_body(self) -> None:
         peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])

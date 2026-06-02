@@ -246,6 +246,13 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             if not messages:
                 raise RequestError("not_found", "message thread not found for this team")
             return [message.as_dict() for message in messages]
+        if request_type == "prune":
+            return store.prune_done(
+                self._require(request, "before"),
+                request.get("team"),
+                int(request.get("limit", 100)),
+                bool(request.get("apply", False)),
+            )
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
     def _send(self, request: dict[str, Any]) -> dict[str, Any]:
