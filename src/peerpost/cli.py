@@ -212,6 +212,7 @@ def command_send(args: argparse.Namespace) -> int:
         priority=args.priority,
         parent_id=args.reply_to,
     )
+    warn_unregistered_targets(data)
     if args.output_format == "json":
         print(format_json(data))
         return 0
@@ -232,6 +233,7 @@ def command_reply(args: argparse.Namespace) -> int:
         kind=args.kind,
         priority=args.priority,
     )
+    warn_unregistered_targets(data)
     if args.output_format == "json":
         print(format_json(data))
         return 0
@@ -240,6 +242,16 @@ def command_reply(args: argparse.Namespace) -> int:
     if data.get("delivered_now"):
         print(f"delivered now: {', '.join(data['delivered_now'])}")
     return 0
+
+
+def warn_unregistered_targets(data: dict[str, Any]) -> None:
+    targets = data.get("unregistered_targets") or []
+    if targets:
+        eprint(
+            "warning: unregistered recipient id(s): "
+            f"{', '.join(targets)}. Check with: peerpost agents --team "
+            f"{data['message']['team']}"
+        )
 
 
 def print_messages(messages: list[dict[str, Any]], output_format: str = "plain") -> None:
