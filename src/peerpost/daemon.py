@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .db import Store
 from .paths import PeerpostPaths, ensure_home, get_paths, restrict_file
 from .protocol import (
@@ -210,7 +211,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         request_type = request.get("type")
         store = self.server.store
         if request_type == "ping":
-            return {"status": "ok", "pid": os.getpid()}
+            return {"status": "ok", "pid": os.getpid(), "version": __version__}
         if request_type == "shutdown":
             threading.Thread(target=self._shutdown_later, daemon=True).start()
             return {"status": "stopping", "pid": os.getpid()}

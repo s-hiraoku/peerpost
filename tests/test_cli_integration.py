@@ -234,6 +234,8 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("home: ok:", result.stdout)
         self.assertIn("daemon: ok: running pid", result.stdout)
+        self.assertIn("version 1.0.0", result.stdout)
+        self.assertIn("version: ok: cli 1.0.0; daemon 1.0.0", result.stdout)
         self.assertIn("status: ok", result.stdout)
 
     def test_doctor_json_reports_actionable_checks(self) -> None:
@@ -242,10 +244,17 @@ class CliIntegrationTest(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertEqual(report["status"], "ok")
         self.assertEqual(report["paths"]["home"], self.env["PEERPOST_HOME"])
+        self.assertEqual(report["version"], {"cli": "1.0.0", "daemon": "1.0.0"})
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["daemon"]["status"], "ok")
+        self.assertEqual(checks["version"]["status"], "ok")
         self.assertEqual(checks["socket"]["status"], "ok")
         self.assertIn("log", checks)
+
+    def test_daemon_status_reports_version(self) -> None:
+        result = self.run_peerpost("daemon", "status")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("version 1.0.0", result.stdout)
 
     def test_doctor_self_test_exercises_delivery_path(self) -> None:
         db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"

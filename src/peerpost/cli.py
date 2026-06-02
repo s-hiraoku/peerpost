@@ -125,11 +125,11 @@ def command_daemon(args: argparse.Namespace) -> int:
             return 0
         data = daemon_ping()
         if data:
-            print(f"peerpostd is running (pid {data.get('pid')})")
+            print(f"peerpostd is running (pid {data.get('pid')}, version {data.get('version', 'unknown')})")
             return 0
         data = start_daemon_background()
         if data:
-            print(f"peerpostd started (pid {data.get('pid')})")
+            print(f"peerpostd started (pid {data.get('pid')}, version {data.get('version', 'unknown')})")
             return 0
         eprint("failed to start peerpostd")
         return 1
@@ -140,7 +140,10 @@ def command_daemon(args: argparse.Namespace) -> int:
         except DaemonNotRunning:
             print(f"peerpostd is not running (pid file: {pid_text})")
             return 1
-        print(f"peerpostd is running (pid {data.get('pid')}, pid file: {pid_text})")
+        print(
+            f"peerpostd is running (pid {data.get('pid')}, "
+            f"version {data.get('version', 'unknown')}, pid file: {pid_text})"
+        )
         return 0
     if args.daemon_command == "stop":
         try:
@@ -507,6 +510,7 @@ def command_doctor(args: argparse.Namespace) -> int:
     _doctor_check(checks, "pid", "ok" if paths.pid.exists() else "info", str(pid_detail))
 
     daemon_running = False
+    daemon_version: str | None = None
     try:
         data = client().request("ping")
     except DaemonNotRunning:
@@ -515,7 +519,27 @@ def command_doctor(args: argparse.Namespace) -> int:
         _doctor_check(checks, "daemon", "error", str(exc), "peerpost daemon stop; peerpost daemon start")
     else:
         daemon_running = True
-        _doctor_check(checks, "daemon", "ok", f"running pid {data.get('pid')}")
+        daemon_version = data.get("version")
+        daemon_detail = f"running pid {data.get('pid')} version {daemon_version or 'unknown'}"
+        _doctor_check(checks, "daemon", "ok", daemon_detail)
+        if daemon_version is None:
+            _doctor_check(
+                checks,
+                "version",
+                "warn",
+                f"cli {__version__}; daemon version unknown",
+                "peerpost daemon stop; peerpost daemon start",
+            )
+        elif daemon_version != __version__:
+            _doctor_check(
+                checks,
+                "version",
+                "warn",
+                f"cli {__version__}; daemon {daemon_version}",
+                "peerpost daemon stop; peerpost daemon start",
+            )
+        else:
+            _doctor_check(checks, "version", "ok", f"cli {__version__}; daemon {daemon_version}")
 
     self_test: dict[str, Any] | None = None
     if args.self_test:
@@ -576,6 +600,10 @@ def command_doctor(args: argparse.Namespace) -> int:
             "socket": str(paths.socket),
             "pid": str(paths.pid),
             "log": str(paths.log),
+        },
+        "version": {
+            "cli": __version__,
+            "daemon": daemon_version,
         },
         "repairs": repairs,
         "self_test": self_test,

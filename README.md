@@ -56,7 +56,7 @@ Check the setup:
 peerpost doctor
 ```
 
-`doctor` prints actionable fixes when something is wrong. For scripts:
+`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches after upgrades. For scripts:
 
 ```sh
 peerpost doctor --format json
