@@ -45,6 +45,12 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("python -m unittest discover -v", workflow)
         self.assertIn("python -m pip wheel . --no-deps", workflow)
 
+    def test_release_checklist_documents_runtime_smoke_test(self) -> None:
+        checklist = (ROOT / "docs" / "release.md").read_text(encoding="utf-8")
+        self.assertIn("peerpost doctor --self-test", checklist)
+        self.assertIn("peerpost backup", checklist)
+        self.assertIn("peerpost daemon stop", checklist)
+
     def test_decode_rejects_non_object_json(self) -> None:
         with self.assertRaises(ProtocolError):
             decode_json_line("[1, 2, 3]\n")

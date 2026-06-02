@@ -262,6 +262,8 @@ PYTHONPATH=src python -m unittest discover -v
 tmpdir="$(mktemp -d)" && python -m pip wheel . --no-deps -w "$tmpdir" && rm -rf "$tmpdir"
 ```
 
+For the full release checklist, see [Release Checklist](docs/release.md).
+
 ## Paths
 
 By default, peerpost stores state in:
