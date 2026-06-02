@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import select
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -366,15 +367,45 @@ def _mode(path: Path) -> str:
         return "unknown"
 
 
-def command_doctor(_args: argparse.Namespace) -> int:
+def _mode_int(path: Path) -> int | None:
+    try:
+        return path.stat().st_mode & 0o777
+    except OSError:
+        return None
+
+
+def _doctor_check(
+    checks: list[dict[str, Any]],
+    name: str,
+    status: str,
+    detail: str,
+    fix: str | None = None,
+) -> None:
+    check = {"name": name, "status": status, "detail": detail}
+    if fix:
+        check["fix"] = fix
+    checks.append(check)
+
+
+def command_doctor(args: argparse.Namespace) -> int:
     try:
         paths = ensure_home(get_paths())
     except OSError as exc:
         eprint(f"home: error: {exc}")
         return 1
 
-    checks: list[tuple[str, str, str]] = []
-    checks.append(("home", "ok", f"{paths.home} mode {_mode(paths.home)}"))
+    checks: list[dict[str, Any]] = []
+    home_mode = _mode_int(paths.home)
+    if home_mode == 0o700:
+        _doctor_check(checks, "home", "ok", f"{paths.home} mode {_mode(paths.home)}")
+    else:
+        _doctor_check(
+            checks,
+            "home",
+            "warn",
+            f"{paths.home} mode {_mode(paths.home)}; expected 0o700",
+            f"chmod 700 {paths.home}",
+        )
 
     if paths.db.exists():
         try:
@@ -388,35 +419,79 @@ def command_doctor(_args: argparse.Namespace) -> int:
             detail = f"{paths.db} mode {_mode(paths.db)}"
             if version:
                 detail += f" schema_version {version[0]}"
-            checks.append(("database", "ok", detail))
+            db_mode = _mode_int(paths.db)
+            if version and version[0] != "1":
+                _doctor_check(checks, "database", "error", detail, "unsupported schema; backup the database before migrating")
+            elif db_mode not in (None, 0o600):
+                _doctor_check(checks, "database", "warn", f"{detail}; expected mode 0o600", f"chmod 600 {paths.db}")
+            else:
+                _doctor_check(checks, "database", "ok", detail)
         except sqlite3.Error as exc:
-            checks.append(("database", "error", f"{paths.db}: {exc}"))
+            _doctor_check(checks, "database", "error", f"{paths.db}: {exc}", "check peerpost.sqlite or restore from backup")
     else:
-        checks.append(("database", "info", f"{paths.db} does not exist yet"))
+        _doctor_check(
+            checks,
+            "database",
+            "info",
+            f"{paths.db} does not exist yet",
+            "peerpost setup --start-daemon",
+        )
 
     pid_detail = paths.pid.read_text(encoding="utf-8").strip() if paths.pid.exists() else "missing"
-    checks.append(("pid", "ok" if paths.pid.exists() else "info", str(pid_detail)))
+    _doctor_check(checks, "pid", "ok" if paths.pid.exists() else "info", str(pid_detail))
 
+    daemon_running = False
     try:
         data = client().request("ping")
     except DaemonNotRunning:
-        checks.append(("daemon", "warn", NOT_RUNNING))
+        _doctor_check(checks, "daemon", "warn", NOT_RUNNING, "peerpost daemon start")
     except PeerpostClientError as exc:
-        checks.append(("daemon", "error", str(exc)))
+        _doctor_check(checks, "daemon", "error", str(exc), "peerpost daemon stop; peerpost daemon start")
     else:
-        checks.append(("daemon", "ok", f"running pid {data.get('pid')}"))
+        daemon_running = True
+        _doctor_check(checks, "daemon", "ok", f"running pid {data.get('pid')}")
 
-    checks.append(("socket", "ok" if paths.socket.exists() else "info", str(paths.socket)))
+    if paths.socket.exists() and daemon_running:
+        _doctor_check(checks, "socket", "ok", str(paths.socket))
+    elif paths.socket.exists():
+        _doctor_check(checks, "socket", "warn", f"{paths.socket} exists but daemon is not responding", f"rm -f {paths.socket}; peerpost daemon start")
+    else:
+        _doctor_check(checks, "socket", "info", str(paths.socket), "peerpost daemon start")
 
-    exit_code = 0
-    for name, status, detail in checks:
-        print(f"{name}: {status}: {detail}")
-        if status == "error":
-            exit_code = 1
-    if exit_code == 0:
-        has_warning = any(status == "warn" for _, status, _ in checks)
-        print(f"status: {'warnings' if has_warning else 'ok'}")
-    return exit_code
+    peerpost_bin = shutil.which("peerpost")
+    if peerpost_bin:
+        _doctor_check(checks, "path", "ok", f"peerpost found at {peerpost_bin}")
+    else:
+        _doctor_check(checks, "path", "info", "peerpost command was not found on PATH", "python -m pip install -e .")
+
+    _doctor_check(checks, "log", "info", str(paths.log))
+
+    has_errors = any(check["status"] == "error" for check in checks)
+    has_warnings = any(check["status"] == "warn" for check in checks)
+    status = "errors" if has_errors else "warnings" if has_warnings else "ok"
+    report = {
+        "status": status,
+        "paths": {
+            "home": str(paths.home),
+            "db": str(paths.db),
+            "socket": str(paths.socket),
+            "pid": str(paths.pid),
+            "log": str(paths.log),
+        },
+        "checks": checks,
+    }
+
+    if args.output_format == "json":
+        print(format_json(report))
+    else:
+        for check in checks:
+            print(f"{check['name']}: {check['status']}: {check['detail']}")
+            if check.get("fix"):
+                print(f"  fix: {check['fix']}")
+        print(f"status: {status}")
+    if has_errors or (args.strict and has_warnings):
+        return 1
+    return 0
 
 
 def snippet_for(adapter: str, agent: str, team: str) -> str:
@@ -641,6 +716,8 @@ def build_parser() -> argparse.ArgumentParser:
     paths.set_defaults(func=command_paths)
 
     doctor = sub.add_parser("doctor")
+    doctor.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    doctor.add_argument("--strict", action="store_true", help="return nonzero when warnings are present")
     doctor.set_defaults(func=command_doctor)
 
     snippets = sub.add_parser("install-snippets", aliases=["snippets"])

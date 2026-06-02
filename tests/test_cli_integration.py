@@ -236,6 +236,26 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("daemon: ok: running pid", result.stdout)
         self.assertIn("status: ok", result.stdout)
 
+    def test_doctor_json_reports_actionable_checks(self) -> None:
+        result = self.run_peerpost("doctor", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["paths"]["home"], self.env["PEERPOST_HOME"])
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["daemon"]["status"], "ok")
+        self.assertEqual(checks["socket"]["status"], "ok")
+        self.assertIn("log", checks)
+
+    def test_doctor_suggests_daemon_start_when_not_running(self) -> None:
+        self._stop_daemon()
+        result = self.run_peerpost("doctor")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("daemon: warn:", result.stdout)
+        self.assertIn("fix: peerpost daemon start", result.stdout)
+        strict = self.run_peerpost("doctor", "--strict")
+        self.assertEqual(strict.returncode, 1)
+
     def test_install_snippets_prints_adapter_commands(self) -> None:
         codex = self.run_peerpost(
             "install-snippets", "--adapter", "codex", "--agent", "codex", "--team", "dev"

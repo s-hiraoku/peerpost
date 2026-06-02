@@ -41,6 +41,13 @@ Check the setup:
 peerpost doctor
 ```
 
+`doctor` prints actionable fixes when something is wrong. For scripts:
+
+```sh
+peerpost doctor --format json
+peerpost doctor --strict
+```
+
 ## Minimal Agent-To-Agent Flow
 
 Register two local agents:
