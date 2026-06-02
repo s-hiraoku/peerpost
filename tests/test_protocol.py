@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -30,6 +31,13 @@ class ProtocolTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "peerpost 1.0.0")
+
+    def test_project_metadata_includes_license_file(self) -> None:
+        metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        self.assertEqual(metadata["project"]["license"]["file"], "LICENSE")
+        license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+        self.assertIn("MIT License", license_text)
+        self.assertIn("Permission is hereby granted", license_text)
 
     def test_decode_rejects_non_object_json(self) -> None:
         with self.assertRaises(ProtocolError):

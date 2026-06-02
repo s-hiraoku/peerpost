@@ -25,6 +25,8 @@ peerpost
 peerpostd
 ```
 
+peerpost has no runtime dependencies outside the Python standard library.
+
 ## Fast Setup On This PC
 
 Run setup once:
@@ -305,3 +307,7 @@ For hook formats, peerpost reads hook JSON from stdin when available. If it dete
 - No MCP server or web UI.
 - No automatic edits to Claude, Codex, Copilot, or Antigravity config files.
 - Direct sends do not require the recipient to be pre-registered; broadcasts only target registered agents.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

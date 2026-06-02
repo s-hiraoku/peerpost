@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,8 +9,27 @@ description = "Local-first peer-agent message bus"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "peerpost contributors" }]
-license = { text = "MIT" }
+license = { file = "LICENSE" }
+keywords = ["agents", "cli", "local-first", "message-bus", "sqlite"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development",
+  "Topic :: System :: Distributed Computing",
+]
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/s-hiraoku/peerpost"
+Documentation = "https://github.com/s-hiraoku/peerpost#readme"
 
 [project.scripts]
 peerpost = "peerpost.cli:main"
