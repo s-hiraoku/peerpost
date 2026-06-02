@@ -348,6 +348,19 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("Antigravity/local generic receive command", all_snippets.stdout)
         self.assertIn("Generic local agent receive command", all_snippets.stdout)
 
+    def test_install_snippets_prints_daemon_autostart_snippets(self) -> None:
+        launchd = self.run_peerpost("install-snippets", "--adapter", "launchd")
+        self.assertEqual(launchd.returncode, 0, launchd.stderr)
+        self.assertIn("macOS launchd user agent plist", launchd.stdout)
+        self.assertIn("<key>PEERPOST_HOME</key>", launchd.stdout)
+        self.assertIn(self.env["PEERPOST_HOME"], launchd.stdout)
+
+        systemd = self.run_peerpost("install-snippets", "--adapter", "systemd")
+        self.assertEqual(systemd.returncode, 0, systemd.stderr)
+        self.assertIn("Linux systemd user unit", systemd.stdout)
+        self.assertIn("ExecStart=", systemd.stdout)
+        self.assertIn("peerpost.daemon --foreground", systemd.stdout)
+
     def test_leave_unregisters_agent_and_excludes_from_broadcast(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
@@ -441,6 +454,21 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(data["home"], self.env["PEERPOST_HOME"])
         self.assertIn("pid", data["daemon"])
         self.assertTrue(any(item["adapter"] == "codex" for item in data["snippets"]))
+
+    def test_setup_can_include_daemon_autostart_snippet(self) -> None:
+        result = self.run_peerpost(
+            "setup",
+            "--team",
+            "dev",
+            "--daemon-snippet",
+            "launchd",
+            "--format",
+            "json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertIn("macOS launchd user agent plist", data["daemon_snippet"])
+        self.assertIn(self.env["PEERPOST_SOCKET"], data["daemon_snippet"])
 
     def test_setup_registers_default_agents(self) -> None:
         result = self.run_peerpost(

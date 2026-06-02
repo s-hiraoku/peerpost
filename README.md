@@ -41,6 +41,13 @@ To register a specific local agent during setup:
 peerpost setup --start-daemon --team dev --register reviewer:generic
 ```
 
+To print an optional daemon autostart snippet during setup:
+
+```sh
+peerpost setup --team dev --daemon-snippet launchd
+peerpost setup --team dev --daemon-snippet systemd
+```
+
 Check the setup:
 
 ```sh
@@ -143,6 +150,13 @@ Print all suggested snippets:
 
 ```sh
 peerpost install-snippets --adapter all --team dev
+```
+
+Daemon autostart snippets:
+
+```sh
+peerpost install-snippets --adapter launchd
+peerpost install-snippets --adapter systemd
 ```
 
 For copy/paste setup details by agent, see [Adapter Setup](docs/adapters.md).

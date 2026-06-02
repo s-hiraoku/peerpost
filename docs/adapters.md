@@ -37,6 +37,13 @@ Print snippets any time:
 peerpost install-snippets --adapter all --team dev
 ```
 
+Print daemon autostart snippets without editing OS config files:
+
+```sh
+peerpost install-snippets --adapter launchd
+peerpost install-snippets --adapter systemd
+```
+
 ## Claude Code
 
 Use Claude Code Monitor with:

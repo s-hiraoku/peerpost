@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import select
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -24,6 +26,7 @@ from .paths import ensure_home, get_paths, restrict_file
 KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"}
 HOOK_FORMATS = {"codex-hook", "copilot-hook"}
 SNIPPET_ADAPTERS = ("claude-code", "codex", "copilot", "antigravity", "generic")
+DAEMON_SNIPPETS = ("launchd", "systemd")
 DEFAULT_SETUP_AGENTS = (
     ("claude", "claude-code"),
     ("codex", "codex"),
@@ -630,12 +633,70 @@ def snippet_for(adapter: str, agent: str, team: str) -> str:
     )
 
 
+def daemon_snippet_for(target: str) -> str:
+    paths = ensure_home(get_paths())
+    python = str(Path(sys.executable).resolve())
+    if target == "launchd":
+        return (
+            "# macOS launchd user agent plist\n"
+            "# Save as: ~/Library/LaunchAgents/local.peerpost.peerpostd.plist\n"
+            "# Load with: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.peerpost.peerpostd.plist\n"
+            "# Unload with: launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/local.peerpost.peerpostd.plist\n"
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+            "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+            "<plist version=\"1.0\">\n"
+            "<dict>\n"
+            "  <key>Label</key><string>local.peerpost.peerpostd</string>\n"
+            "  <key>ProgramArguments</key>\n"
+            "  <array>\n"
+            f"    <string>{html.escape(python)}</string>\n"
+            "    <string>-m</string>\n"
+            "    <string>peerpost.daemon</string>\n"
+            "    <string>--foreground</string>\n"
+            "  </array>\n"
+            "  <key>EnvironmentVariables</key>\n"
+            "  <dict>\n"
+            f"    <key>PEERPOST_HOME</key><string>{html.escape(str(paths.home))}</string>\n"
+            f"    <key>PEERPOST_SOCKET</key><string>{html.escape(str(paths.socket))}</string>\n"
+            "  </dict>\n"
+            "  <key>RunAtLoad</key><true/>\n"
+            "  <key>KeepAlive</key><true/>\n"
+            f"  <key>StandardOutPath</key><string>{html.escape(str(paths.log))}</string>\n"
+            f"  <key>StandardErrorPath</key><string>{html.escape(str(paths.log))}</string>\n"
+            "</dict>\n"
+            "</plist>"
+        )
+    if target == "systemd":
+        return (
+            "# Linux systemd user unit\n"
+            "# Save as: ~/.config/systemd/user/peerpostd.service\n"
+            "# Enable with: systemctl --user enable --now peerpostd.service\n"
+            "# Stop with: systemctl --user disable --now peerpostd.service\n"
+            "[Unit]\n"
+            "Description=peerpost local peer-agent message bus\n\n"
+            "[Service]\n"
+            "Type=simple\n"
+            f"Environment=PEERPOST_HOME={shlex.quote(str(paths.home))}\n"
+            f"Environment=PEERPOST_SOCKET={shlex.quote(str(paths.socket))}\n"
+            f"ExecStart={shlex.quote(python)} -m peerpost.daemon --foreground\n"
+            "Restart=on-failure\n"
+            "RestartSec=2\n\n"
+            "[Install]\n"
+            "WantedBy=default.target"
+        )
+    raise ValueError(f"unknown daemon snippet: {target}")
+
+
 def command_install_snippets(args: argparse.Namespace) -> int:
     adapters = SNIPPET_ADAPTERS if args.adapter == "all" else (args.adapter,)
     blocks: list[str] = []
     for adapter in adapters:
-        agent = args.agent or ("claude" if adapter == "claude-code" else adapter)
-        blocks.append(snippet_for(adapter, agent, args.team))
+        if adapter in DAEMON_SNIPPETS:
+            blocks.append(daemon_snippet_for(adapter))
+        else:
+            agent = args.agent or ("claude" if adapter == "claude-code" else adapter)
+            blocks.append(snippet_for(adapter, agent, args.team))
     print("\n\n".join(blocks))
     return 0
 
@@ -702,6 +763,7 @@ def command_setup(args: argparse.Namespace) -> int:
         "team": args.team,
         "registered_agents": registered_agents,
         "snippets": snippets,
+        "daemon_snippet": daemon_snippet_for(args.daemon_snippet) if args.daemon_snippet else None,
     }
     if args.output_format == "json":
         print(format_json(data))
@@ -726,6 +788,11 @@ def command_setup(args: argparse.Namespace) -> int:
         for item in snippets:
             print()
             print(item["snippet"])
+    if args.daemon_snippet:
+        print()
+        print("daemon autostart snippet:")
+        print()
+        print(daemon_snippet_for(args.daemon_snippet))
     return 0
 
 
@@ -898,9 +965,9 @@ def build_parser() -> argparse.ArgumentParser:
     snippets = sub.add_parser("install-snippets", aliases=["snippets"])
     snippets.add_argument(
         "--adapter",
-        choices=[*SNIPPET_ADAPTERS, "all"],
+        choices=[*SNIPPET_ADAPTERS, *DAEMON_SNIPPETS, "all"],
         default="all",
-        help="agent adapter snippet to print",
+        help="agent adapter or daemon autostart snippet to print",
     )
     snippets.add_argument("--team", default="dev")
     snippets.add_argument("--agent", help="override the agent id used in the snippet")
@@ -916,6 +983,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     setup.add_argument("--agent", help="override the agent id used in snippets")
     setup.add_argument("--start-daemon", action="store_true")
+    setup.add_argument(
+        "--daemon-snippet",
+        choices=DAEMON_SNIPPETS,
+        help="also print a daemon autostart snippet for this OS service manager",
+    )
     setup.add_argument(
         "--register-default-agents",
         action="store_true",
