@@ -39,6 +39,12 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("MIT License", license_text)
         self.assertIn("Permission is hereby granted", license_text)
 
+    def test_ci_workflow_runs_tests_and_wheel_build(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+        self.assertIn("python -m compileall -q src tests", workflow)
+        self.assertIn("python -m unittest discover -v", workflow)
+        self.assertIn("python -m pip wheel . --no-deps", workflow)
+
     def test_decode_rejects_non_object_json(self) -> None:
         with self.assertRaises(ProtocolError):
             decode_json_line("[1, 2, 3]\n")

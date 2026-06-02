@@ -252,6 +252,16 @@ peerpost prune --team dev --older-than-days 30 --apply
 
 `prune` only removes messages whose deliveries are all `done`.
 
+## Release Checks
+
+Run the same core checks used by CI:
+
+```sh
+PYTHONPATH=src python -m compileall -q src tests
+PYTHONPATH=src python -m unittest discover -v
+tmpdir="$(mktemp -d)" && python -m pip wheel . --no-deps -w "$tmpdir" && rm -rf "$tmpdir"
+```
+
 ## Paths
 
 By default, peerpost stores state in:
