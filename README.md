@@ -54,9 +54,10 @@ Check the setup:
 
 ```sh
 peerpost doctor
+peerpost doctor --team dev
 ```
 
-`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches after upgrades. For scripts:
+`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches after upgrades. With `--team`, it also reports pending deliveries and unregistered recipient ids. For scripts:
 
 ```sh
 peerpost doctor --format json

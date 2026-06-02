@@ -557,6 +557,35 @@ def command_doctor(args: argparse.Namespace) -> int:
                 )
                 _doctor_check(checks, "self-test", check_status, detail or "completed")
 
+    delivery_health: dict[str, Any] | None = None
+    if args.team:
+        if not daemon_running:
+            _doctor_check(checks, "deliveries", "warn", f"skipped team {args.team} because peerpostd is not running", "peerpost daemon start")
+        else:
+            try:
+                delivery_health = client().request("delivery_health", team=args.team)
+            except PeerpostClientError as exc:
+                _doctor_check(checks, "deliveries", "error", str(exc))
+            else:
+                status_counts = delivery_health.get("status_counts", {})
+                pending = int(status_counts.get("pending", 0))
+                orphan_count = int(delivery_health.get("orphan_count", 0))
+                detail = (
+                    f"team {args.team}: {pending} pending, "
+                    f"{orphan_count} unregistered recipient(s)"
+                )
+                if orphan_count:
+                    _doctor_check(
+                        checks,
+                        "deliveries",
+                        "warn",
+                        detail,
+                        "check recipient ids with: peerpost agents --team "
+                        f"{args.team}",
+                    )
+                else:
+                    _doctor_check(checks, "deliveries", "ok", detail)
+
     socket_reported = False
     if args.fix and paths.socket.exists() and not daemon_running:
         try:
@@ -605,6 +634,7 @@ def command_doctor(args: argparse.Namespace) -> int:
             "cli": __version__,
             "daemon": daemon_version,
         },
+        "delivery_health": delivery_health,
         "repairs": repairs,
         "self_test": self_test,
         "checks": checks,
@@ -976,6 +1006,7 @@ def build_parser() -> argparse.ArgumentParser:
     logs.set_defaults(func=command_logs)
 
     doctor = sub.add_parser("doctor")
+    doctor.add_argument("--team", help="also check delivery health for one team")
     doctor.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     doctor.add_argument("--strict", action="store_true", help="return nonzero when warnings are present")
     doctor.add_argument(

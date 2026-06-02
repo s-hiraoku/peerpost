@@ -431,6 +431,56 @@ class Store:
         }
 
     @locked_method
+    def delivery_health(self, team: str | None = None) -> dict[str, Any]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if team:
+            clauses.append("team = ?")
+            params.append(team)
+        where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        status_rows = self.conn.execute(
+            f"""
+            SELECT status, COUNT(*) AS count
+            FROM deliveries
+            {where_sql}
+            GROUP BY status
+            ORDER BY status
+            """,
+            tuple(params),
+        ).fetchall()
+        status_counts = {row["status"]: row["count"] for row in status_rows}
+
+        orphan_clauses = ["a.id IS NULL", "d.status != 'done'"]
+        orphan_params: list[Any] = []
+        if team:
+            orphan_clauses.append("d.team = ?")
+            orphan_params.append(team)
+        orphan_rows = self.conn.execute(
+            f"""
+            SELECT
+              d.team,
+              d.to_agent,
+              COUNT(*) AS total,
+              SUM(CASE WHEN d.status = 'pending' THEN 1 ELSE 0 END) AS pending,
+              SUM(CASE WHEN d.status != 'done' THEN 1 ELSE 0 END) AS non_done
+            FROM deliveries d
+            LEFT JOIN agents a ON a.team = d.team AND a.id = d.to_agent
+            WHERE {' AND '.join(orphan_clauses)}
+            GROUP BY d.team, d.to_agent
+            ORDER BY d.team, d.to_agent
+            """,
+            tuple(orphan_params),
+        ).fetchall()
+        orphans = [row_to_dict(row) for row in orphan_rows]
+        return {
+            "team": team,
+            "status_counts": status_counts,
+            "orphan_count": len(orphans),
+            "orphans": orphans,
+        }
+
+    @locked_method
     def self_test(self) -> dict[str, Any]:
         team = f"peerpost-self-test-{secrets.token_hex(4)}"
         sender = "peerpost-self-sender"

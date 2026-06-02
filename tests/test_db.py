@@ -188,6 +188,18 @@ class DbTest(unittest.TestCase):
         self.assertEqual(self.store.conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0], before_messages)
         self.assertEqual(self.store.conn.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0], before_deliveries)
 
+    def test_delivery_health_reports_unregistered_recipients(self) -> None:
+        self.store.join_agent("codex", "codex", "dev")
+        self.store.create_message("dev", "claude", "ok", ["codex"])
+        self.store.create_message("dev", "claude", "typo", ["cdoex"])
+
+        health = self.store.delivery_health("dev")
+
+        self.assertEqual(health["status_counts"], {"pending": 2})
+        self.assertEqual(health["orphan_count"], 1)
+        self.assertEqual(health["orphans"][0]["to_agent"], "cdoex")
+        self.assertEqual(health["orphans"][0]["pending"], 1)
+
     def test_broadcast_targets_all_agents_except_sender(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")
         self.store.join_agent("codex", "codex", "dev")

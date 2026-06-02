@@ -285,6 +285,29 @@ class CliIntegrationTest(unittest.TestCase):
             after.close()
         self.assertEqual(after_counts, before_counts)
 
+    def test_doctor_team_reports_unregistered_delivery_targets(self) -> None:
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "cdoex",
+            "--team",
+            "dev",
+            "typo target",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+
+        result = self.run_peerpost("doctor", "--team", "dev", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "warnings")
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["deliveries"]["status"], "warn")
+        self.assertEqual(report["delivery_health"]["orphan_count"], 1)
+        self.assertEqual(report["delivery_health"]["orphans"][0]["to_agent"], "cdoex")
+
     def test_doctor_suggests_daemon_start_when_not_running(self) -> None:
         self._stop_daemon()
         result = self.run_peerpost("doctor")
