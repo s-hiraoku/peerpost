@@ -431,6 +431,87 @@ class Store:
         }
 
     @locked_method
+    def self_test(self) -> dict[str, Any]:
+        team = f"peerpost-self-test-{secrets.token_hex(4)}"
+        sender = "peerpost-self-sender"
+        receiver = "peerpost-self-receiver"
+        message_id = make_message_id()
+        created_at = utc_now()
+        checks: list[dict[str, Any]] = []
+        self.conn.execute("SAVEPOINT peerpost_self_test")
+        try:
+            self.conn.executemany(
+                """
+                INSERT INTO agents (id, team, agent_type, workspace, created_at, updated_at)
+                VALUES (?, ?, 'generic', NULL, ?, ?)
+                """,
+                [
+                    (sender, team, created_at, created_at),
+                    (receiver, team, created_at, created_at),
+                ],
+            )
+            agent_count = self.conn.execute(
+                "SELECT COUNT(*) AS count FROM agents WHERE team = ?",
+                (team,),
+            ).fetchone()["count"]
+            checks.append({"name": "agents", "ok": agent_count == 2, "detail": f"{agent_count} registered"})
+
+            self.conn.execute(
+                """
+                INSERT INTO messages
+                  (id, team, from_agent, body, kind, priority, parent_id, created_at, metadata_json)
+                VALUES (?, ?, ?, ?, 'self-test', 'normal', NULL, ?, '{}')
+                """,
+                (message_id, team, sender, "peerpost self-test", created_at),
+            )
+            self.conn.execute(
+                """
+                INSERT INTO deliveries (message_id, team, to_agent, status)
+                VALUES (?, ?, ?, 'pending')
+                """,
+                (message_id, team, receiver),
+            )
+            pending_count = self.conn.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM messages m
+                JOIN deliveries d ON d.message_id = m.id
+                WHERE d.team = ? AND d.to_agent = ? AND d.status = 'pending'
+                """,
+                (team, receiver),
+            ).fetchone()["count"]
+            checks.append({"name": "pending", "ok": pending_count == 1, "detail": f"{pending_count} pending"})
+
+            delivered_at = utc_now()
+            self.conn.execute(
+                """
+                UPDATE deliveries
+                SET status = 'delivered', delivered_at = ?
+                WHERE message_id = ? AND team = ? AND to_agent = ? AND status = 'pending'
+                """,
+                (delivered_at, message_id, team, receiver),
+            )
+            status = self.conn.execute(
+                """
+                SELECT status FROM deliveries
+                WHERE message_id = ? AND team = ? AND to_agent = ?
+                """,
+                (message_id, team, receiver),
+            ).fetchone()["status"]
+            checks.append({"name": "delivery", "ok": status == "delivered", "detail": status})
+
+            ok = all(check["ok"] for check in checks)
+            return {
+                "ok": ok,
+                "team": team,
+                "message_id": message_id,
+                "checks": checks,
+            }
+        finally:
+            self.conn.execute("ROLLBACK TO peerpost_self_test")
+            self.conn.execute("RELEASE peerpost_self_test")
+
+    @locked_method
     def read_message(self, message_id: str, agent_id: str, team: str) -> Message | None:
         messages = self._messages_query(
             "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)

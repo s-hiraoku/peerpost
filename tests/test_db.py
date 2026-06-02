@@ -172,6 +172,22 @@ class DbTest(unittest.TestCase):
         data = self.store.backup(backup_path, overwrite=True)
         self.assertEqual(data["path"], str(backup_path.resolve()))
 
+    def test_self_test_exercises_delivery_path_without_persisting_artifacts(self) -> None:
+        before_agents = self.store.conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
+        before_messages = self.store.conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        before_deliveries = self.store.conn.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0]
+
+        data = self.store.self_test()
+
+        self.assertTrue(data["ok"])
+        checks = {check["name"]: check for check in data["checks"]}
+        self.assertEqual(checks["agents"]["detail"], "2 registered")
+        self.assertEqual(checks["pending"]["detail"], "1 pending")
+        self.assertEqual(checks["delivery"]["detail"], "delivered")
+        self.assertEqual(self.store.conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0], before_agents)
+        self.assertEqual(self.store.conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0], before_messages)
+        self.assertEqual(self.store.conn.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0], before_deliveries)
+
     def test_broadcast_targets_all_agents_except_sender(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")
         self.store.join_agent("codex", "codex", "dev")

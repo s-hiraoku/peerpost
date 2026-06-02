@@ -60,6 +60,12 @@ To repair safe local filesystem issues such as permissions and stale socket file
 peerpost doctor --fix
 ```
 
+To verify daemon, SQLite storage, and pending-to-delivered message flow without leaving test messages behind:
+
+```sh
+peerpost doctor --self-test
+```
+
 If the daemon starts but behavior looks wrong, inspect recent daemon events:
 
 ```sh

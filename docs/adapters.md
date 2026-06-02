@@ -19,6 +19,12 @@ If `doctor` reports local permission or stale socket issues, run:
 peerpost doctor --fix
 ```
 
+To verify the daemon, database, and delivery path after setup:
+
+```sh
+peerpost doctor --self-test
+```
+
 For custom agent ids, register them explicitly:
 
 ```sh

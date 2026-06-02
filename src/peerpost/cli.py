@@ -514,6 +514,22 @@ def command_doctor(args: argparse.Namespace) -> int:
         daemon_running = True
         _doctor_check(checks, "daemon", "ok", f"running pid {data.get('pid')}")
 
+    self_test: dict[str, Any] | None = None
+    if args.self_test:
+        if not daemon_running:
+            _doctor_check(checks, "self-test", "warn", "skipped because peerpostd is not running", "peerpost daemon start")
+        else:
+            try:
+                self_test = client().request("self_test")
+            except PeerpostClientError as exc:
+                _doctor_check(checks, "self-test", "error", str(exc))
+            else:
+                check_status = "ok" if self_test.get("ok") else "error"
+                detail = ", ".join(
+                    f"{item['name']}={item['detail']}" for item in self_test.get("checks", [])
+                )
+                _doctor_check(checks, "self-test", check_status, detail or "completed")
+
     socket_reported = False
     if args.fix and paths.socket.exists() and not daemon_running:
         try:
@@ -559,6 +575,7 @@ def command_doctor(args: argparse.Namespace) -> int:
             "log": str(paths.log),
         },
         "repairs": repairs,
+        "self_test": self_test,
         "checks": checks,
     }
 
@@ -870,6 +887,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--fix",
         action="store_true",
         help="repair safe local filesystem issues such as permissions and stale sockets",
+    )
+    doctor.add_argument(
+        "--self-test",
+        action="store_true",
+        help="exercise daemon, SQLite storage, pending delivery, and delivered status checks",
     )
     doctor.set_defaults(func=command_doctor)
 

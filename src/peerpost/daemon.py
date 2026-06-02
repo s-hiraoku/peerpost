@@ -305,6 +305,10 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                 raise RequestError("bad_request", f"backup output is a directory: {exc}") from exc
             self.server.logger.info("database backup path=%s bytes=%s", data["path"], data["bytes"])
             return data
+        if request_type == "self_test":
+            data = store.self_test()
+            self.server.logger.info("self-test ok=%s checks=%s", data["ok"], len(data["checks"]))
+            return data
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
     def _send(self, request: dict[str, Any]) -> dict[str, Any]:

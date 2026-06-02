@@ -247,6 +247,35 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(checks["socket"]["status"], "ok")
         self.assertIn("log", checks)
 
+    def test_doctor_self_test_exercises_delivery_path(self) -> None:
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        before = sqlite3.connect(db_path)
+        try:
+            before_counts = {
+                table: before.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                for table in ("agents", "messages", "deliveries")
+            }
+        finally:
+            before.close()
+
+        result = self.run_peerpost("doctor", "--self-test", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "ok")
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["self-test"]["status"], "ok")
+        self.assertTrue(report["self_test"]["ok"])
+        after = sqlite3.connect(db_path)
+        try:
+            after_counts = {
+                table: after.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                for table in ("agents", "messages", "deliveries")
+            }
+        finally:
+            after.close()
+        self.assertEqual(after_counts, before_counts)
+
     def test_doctor_suggests_daemon_start_when_not_running(self) -> None:
         self._stop_daemon()
         result = self.run_peerpost("doctor")
