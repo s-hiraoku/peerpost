@@ -256,6 +256,33 @@ class CliIntegrationTest(unittest.TestCase):
         strict = self.run_peerpost("doctor", "--strict")
         self.assertEqual(strict.returncode, 1)
 
+    def test_doctor_fix_repairs_database_mode(self) -> None:
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        db_path.chmod(0o644)
+
+        result = self.run_peerpost("doctor", "--fix", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertIn(f"chmod 600 {db_path}", report["repairs"])
+        self.assertEqual(db_path.stat().st_mode & 0o777, 0o600)
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["database"]["status"], "ok")
+
+    def test_doctor_fix_removes_stale_socket(self) -> None:
+        self._stop_daemon()
+        socket_path = Path(self.env["PEERPOST_SOCKET"])
+        socket_path.write_text("stale", encoding="utf-8")
+
+        result = self.run_peerpost("doctor", "--fix", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertIn(f"removed stale socket {socket_path}", report["repairs"])
+        self.assertFalse(socket_path.exists())
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["socket"]["status"], "info")
+
     def test_logs_reports_daemon_events_without_message_body(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

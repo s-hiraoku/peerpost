@@ -13,6 +13,12 @@ peerpost setup --start-daemon --team dev --register-default-agents
 peerpost doctor
 ```
 
+If `doctor` reports local permission or stale socket issues, run:
+
+```sh
+peerpost doctor --fix
+```
+
 For custom agent ids, register them explicitly:
 
 ```sh

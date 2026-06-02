@@ -54,6 +54,12 @@ peerpost doctor --format json
 peerpost doctor --strict
 ```
 
+To repair safe local filesystem issues such as permissions and stale socket files:
+
+```sh
+peerpost doctor --fix
+```
+
 If the daemon starts but behavior looks wrong, inspect recent daemon events:
 
 ```sh

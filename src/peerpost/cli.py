@@ -18,7 +18,7 @@ from typing import Any
 from . import __version__
 from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
 from .formatters import format_drain, format_json, format_monitor, format_plain
-from .paths import ensure_home, get_paths
+from .paths import ensure_home, get_paths, restrict_file
 
 
 KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"}
@@ -434,12 +434,28 @@ def _doctor_check(
     checks.append(check)
 
 
+def _repair_private_file(path: Path, repairs: list[str]) -> None:
+    if path.exists() and _mode_int(path) != 0o600:
+        restrict_file(path)
+        repairs.append(f"chmod 600 {path}")
+
+
 def command_doctor(args: argparse.Namespace) -> int:
+    raw_paths = get_paths()
+    home_mode_before = _mode_int(raw_paths.home) if raw_paths.home.exists() else None
     try:
-        paths = ensure_home(get_paths())
+        paths = ensure_home(raw_paths)
     except OSError as exc:
         eprint(f"home: error: {exc}")
         return 1
+
+    repairs: list[str] = []
+    if args.fix and home_mode_before not in (None, 0o700):
+        repairs.append(f"chmod 700 {paths.home}")
+    if args.fix:
+        _repair_private_file(paths.db, repairs)
+        _repair_private_file(paths.pid, repairs)
+        _repair_private_file(paths.log, repairs)
 
     checks: list[dict[str, Any]] = []
     home_mode = _mode_int(paths.home)
@@ -498,12 +514,29 @@ def command_doctor(args: argparse.Namespace) -> int:
         daemon_running = True
         _doctor_check(checks, "daemon", "ok", f"running pid {data.get('pid')}")
 
-    if paths.socket.exists() and daemon_running:
-        _doctor_check(checks, "socket", "ok", str(paths.socket))
-    elif paths.socket.exists():
-        _doctor_check(checks, "socket", "warn", f"{paths.socket} exists but daemon is not responding", f"rm -f {paths.socket}; peerpost daemon start")
-    else:
-        _doctor_check(checks, "socket", "info", str(paths.socket), "peerpost daemon start")
+    socket_reported = False
+    if args.fix and paths.socket.exists() and not daemon_running:
+        try:
+            paths.socket.unlink()
+        except OSError as exc:
+            socket_reported = True
+            _doctor_check(
+                checks,
+                "socket",
+                "warn",
+                f"{paths.socket} exists but could not be removed: {exc}",
+                f"rm -f {paths.socket}; peerpost daemon start",
+            )
+        else:
+            repairs.append(f"removed stale socket {paths.socket}")
+
+    if not socket_reported:
+        if paths.socket.exists() and daemon_running:
+            _doctor_check(checks, "socket", "ok", str(paths.socket))
+        elif paths.socket.exists():
+            _doctor_check(checks, "socket", "warn", f"{paths.socket} exists but daemon is not responding", f"rm -f {paths.socket}; peerpost daemon start")
+        else:
+            _doctor_check(checks, "socket", "info", str(paths.socket), "peerpost daemon start")
 
     peerpost_bin = shutil.which("peerpost")
     if peerpost_bin:
@@ -525,6 +558,7 @@ def command_doctor(args: argparse.Namespace) -> int:
             "pid": str(paths.pid),
             "log": str(paths.log),
         },
+        "repairs": repairs,
         "checks": checks,
     }
 
@@ -535,6 +569,13 @@ def command_doctor(args: argparse.Namespace) -> int:
             print(f"{check['name']}: {check['status']}: {check['detail']}")
             if check.get("fix"):
                 print(f"  fix: {check['fix']}")
+        if args.fix:
+            print("repairs:")
+            if repairs:
+                for repair in repairs:
+                    print(f"  {repair}")
+            else:
+                print("  none")
         print(f"status: {status}")
     if has_errors or (args.strict and has_warnings):
         return 1
@@ -825,6 +866,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor = sub.add_parser("doctor")
     doctor.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     doctor.add_argument("--strict", action="store_true", help="return nonzero when warnings are present")
+    doctor.add_argument(
+        "--fix",
+        action="store_true",
+        help="repair safe local filesystem issues such as permissions and stale sockets",
+    )
     doctor.set_defaults(func=command_doctor)
 
     snippets = sub.add_parser("install-snippets", aliases=["snippets"])
