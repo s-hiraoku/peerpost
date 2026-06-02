@@ -9,16 +9,14 @@ peerpost does not edit agent config files automatically. Copy the snippet for th
 Run once on the machine:
 
 ```sh
-peerpost setup --start-daemon --team dev
+peerpost setup --start-daemon --team dev --register-default-agents
 peerpost doctor
 ```
 
-Register the agents you plan to use:
+For custom agent ids, register them explicitly:
 
 ```sh
-peerpost join --agent claude --type claude-code --team dev
-peerpost join --agent codex --type codex --team dev
-peerpost join --agent copilot --type copilot --team dev
+peerpost setup --start-daemon --team dev --register reviewer:generic
 ```
 
 Print snippets any time:

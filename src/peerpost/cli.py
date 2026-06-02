@@ -24,6 +24,19 @@ from .paths import ensure_home, get_paths
 KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"}
 HOOK_FORMATS = {"codex-hook", "copilot-hook"}
 SNIPPET_ADAPTERS = ("claude-code", "codex", "copilot", "antigravity", "generic")
+DEFAULT_SETUP_AGENTS = (
+    ("claude", "claude-code"),
+    ("codex", "codex"),
+    ("copilot", "copilot"),
+)
+AGENT_TYPE_ALIASES = {
+    "claude": "claude-code",
+    "claude-code": "claude-code",
+    "codex": "codex",
+    "copilot": "copilot",
+    "antigravity": "antigravity",
+    "generic": "generic",
+}
 
 
 def eprint(message: str) -> None:
@@ -569,9 +582,52 @@ def command_install_snippets(args: argparse.Namespace) -> int:
     return 0
 
 
+def _setup_registration_specs(args: argparse.Namespace) -> list[tuple[str, str]]:
+    specs: list[tuple[str, str]] = list(DEFAULT_SETUP_AGENTS if args.register_default_agents else ())
+    for item in args.register or []:
+        if ":" in item:
+            agent, agent_type = item.split(":", 1)
+        else:
+            agent = item
+            agent_type = AGENT_TYPE_ALIASES.get(agent, "generic")
+        agent = agent.strip()
+        agent_type = agent_type.strip()
+        if not agent or not agent_type:
+            raise ValueError(f"invalid registration spec: {item!r}; use AGENT[:TYPE]")
+        specs.append((agent, agent_type))
+
+    deduped: dict[str, str] = {}
+    for agent, agent_type in specs:
+        deduped[agent] = agent_type
+    return sorted(deduped.items())
+
+
 def command_setup(args: argparse.Namespace) -> int:
     paths = ensure_home(get_paths())
+    try:
+        registrations = _setup_registration_specs(args)
+    except ValueError as exc:
+        eprint(str(exc))
+        return 2
     daemon = start_daemon_background() if args.start_daemon else daemon_ping()
+    if registrations and daemon is None:
+        eprint("agent registration requires peerpostd. Run: peerpost setup --start-daemon")
+        return 1
+
+    registered_agents: list[dict[str, Any]] = []
+    for agent, agent_type in registrations:
+        if agent_type not in KNOWN_AGENT_TYPES:
+            eprint(f"warning: unknown agent type '{agent_type}', allowing it")
+        registered_agents.append(
+            client().request(
+                "join",
+                agent=agent,
+                agent_type=agent_type,
+                team=args.team,
+                workspace=None,
+            )
+        )
+
     adapters = SNIPPET_ADAPTERS if args.adapter == "all" else (args.adapter,)
     snippets = []
     for adapter in adapters:
@@ -586,6 +642,7 @@ def command_setup(args: argparse.Namespace) -> int:
         "log": str(paths.log),
         "daemon": daemon or {"status": "not_running"},
         "team": args.team,
+        "registered_agents": registered_agents,
         "snippets": snippets,
     }
     if args.output_format == "json":
@@ -600,6 +657,11 @@ def command_setup(args: argparse.Namespace) -> int:
         print(f"daemon: running pid {daemon.get('pid')}")
     else:
         print("daemon: not running (start with: peerpost daemon start)")
+    if registered_agents:
+        print()
+        print("registered agents:")
+        for agent in registered_agents:
+            print(f"{agent['team']}/{agent['id']} {agent['agent_type']}")
     if snippets:
         print()
         print("agent snippets:")
@@ -786,6 +848,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     setup.add_argument("--agent", help="override the agent id used in snippets")
     setup.add_argument("--start-daemon", action="store_true")
+    setup.add_argument(
+        "--register-default-agents",
+        action="store_true",
+        help="register claude, codex, and copilot in the selected team",
+    )
+    setup.add_argument(
+        "--register",
+        action="append",
+        help="register one agent as AGENT[:TYPE]; repeat for multiple agents",
+    )
     setup.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     setup.set_defaults(func=command_setup)
 

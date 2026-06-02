@@ -386,6 +386,49 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("pid", data["daemon"])
         self.assertTrue(any(item["adapter"] == "codex" for item in data["snippets"]))
 
+    def test_setup_registers_default_agents(self) -> None:
+        result = self.run_peerpost(
+            "setup",
+            "--team",
+            "dev",
+            "--register-default-agents",
+            "--format",
+            "json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        registered = {(agent["id"], agent["agent_type"]) for agent in data["registered_agents"]}
+        self.assertEqual(
+            registered,
+            {
+                ("claude", "claude-code"),
+                ("codex", "codex"),
+                ("copilot", "copilot"),
+            },
+        )
+
+        agents = self.run_peerpost("agents", "--team", "dev", "--format", "json")
+        self.assertEqual(agents.returncode, 0, agents.stderr)
+        agent_ids = {agent["id"] for agent in json.loads(agents.stdout)}
+        self.assertGreaterEqual(agent_ids, {"claude", "codex", "copilot"})
+
+    def test_setup_registers_custom_agent_with_inferred_type(self) -> None:
+        result = self.run_peerpost(
+            "setup",
+            "--team",
+            "dev",
+            "--register",
+            "reviewer",
+            "--format",
+            "json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(
+            [(agent["id"], agent["agent_type"]) for agent in data["registered_agents"]],
+            [("reviewer", "generic")],
+        )
+
     def test_prune_dry_run_and_apply(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

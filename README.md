@@ -30,10 +30,16 @@ peerpostd
 Run setup once:
 
 ```sh
-peerpost setup --start-daemon --team dev
+peerpost setup --start-daemon --team dev --register-default-agents
 ```
 
-This creates the local state directory, starts `peerpostd` if needed, prints the active paths, and shows copy/paste snippets for supported CLI agents. It does not edit Claude, Codex, Copilot, or Antigravity config files.
+This creates the local state directory, starts `peerpostd` if needed, registers `claude`, `codex`, and `copilot`, prints the active paths, and shows copy/paste snippets for supported CLI agents. It does not edit Claude, Codex, Copilot, or Antigravity config files.
+
+To register a specific local agent during setup:
+
+```sh
+peerpost setup --start-daemon --team dev --register reviewer:generic
+```
 
 Check the setup:
 
@@ -56,7 +62,7 @@ peerpost logs --tail 50
 
 ## Minimal Agent-To-Agent Flow
 
-Register two local agents:
+Register two local agents if they are not already registered:
 
 ```sh
 peerpost join --agent claude --type claude-code --team dev
@@ -144,10 +150,9 @@ Unknown agent types are allowed with a warning.
 These are the main commands needed for day-to-day use:
 
 ```sh
-peerpost setup --start-daemon --team dev
+peerpost setup --start-daemon --team dev --register-default-agents
 peerpost doctor
 peerpost logs --tail 50
-peerpost join --agent <id> --type <type> --team dev
 peerpost send --from <agent> --to <agent> --team dev "message"
 peerpost drain --agent <agent> --team dev
 peerpost subscribe --agent <agent> --team dev --format monitor
@@ -159,6 +164,7 @@ Useful but less frequent:
 
 ```sh
 peerpost agents --team dev
+peerpost join --agent <id> --type <type> --team dev
 peerpost inbox --agent <agent> --team dev
 peerpost history --team dev --agent <agent>
 peerpost thread <message-id> --team dev
