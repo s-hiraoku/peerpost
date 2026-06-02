@@ -163,6 +163,7 @@ peerpost inbox --agent <agent> --team dev
 peerpost history --team dev --agent <agent>
 peerpost thread <message-id> --team dev
 peerpost leave --agent <agent> --team dev
+peerpost backup
 peerpost paths
 peerpost logs --tail 50
 ```
@@ -189,7 +190,21 @@ peerpost send --from claude --to codex --team dev \
 
 ## Maintenance
 
-peerpost stores messages durably in SQLite. To see old completed messages that can be removed:
+peerpost stores messages durably in SQLite. Create a daemon-safe backup before maintenance:
+
+```sh
+peerpost backup
+```
+
+By default this writes to `<PEERPOST_HOME>/backups/peerpost-<timestamp>.sqlite`. To choose a path:
+
+```sh
+peerpost backup --output ~/peerpost-backup.sqlite
+```
+
+Existing backup files are not overwritten unless you pass `--overwrite`.
+
+To see old completed messages that can be removed:
 
 ```sh
 peerpost prune --team dev --older-than-days 30

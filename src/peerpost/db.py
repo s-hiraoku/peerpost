@@ -407,6 +407,30 @@ class Store:
         }
 
     @locked_method
+    def backup(self, output_path: Path, overwrite: bool = False) -> dict[str, Any]:
+        output_path = output_path.expanduser().resolve()
+        output_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        try:
+            output_path.parent.chmod(0o700)
+        except OSError:
+            pass
+        if output_path.exists() and output_path.is_dir():
+            raise IsADirectoryError(str(output_path))
+        if output_path.exists() and not overwrite:
+            raise FileExistsError(str(output_path))
+        destination = sqlite3.connect(output_path)
+        try:
+            self.conn.backup(destination)
+        finally:
+            destination.close()
+        restrict_file(output_path)
+        return {
+            "path": str(output_path),
+            "bytes": output_path.stat().st_size,
+            "created_at": utc_now(),
+        }
+
+    @locked_method
     def read_message(self, message_id: str, agent_id: str, team: str) -> Message | None:
         messages = self._messages_query(
             "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)

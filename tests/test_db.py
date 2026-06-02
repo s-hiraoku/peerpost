@@ -146,6 +146,32 @@ class DbTest(unittest.TestCase):
         self.assertIsNone(self.store.delivery_status(done_message["id"], "codex", "dev"))
         self.assertEqual(self.store.delivery_status(pending_message["id"], "codex", "dev"), "pending")
 
+    def test_backup_creates_readable_sqlite_snapshot(self) -> None:
+        message, _ = self.store.create_message("dev", "claude", "backup me", ["codex"])
+        backup_path = Path(self.tmp.name) / "backups" / "peerpost-backup.sqlite"
+
+        data = self.store.backup(backup_path)
+
+        self.assertEqual(data["path"], str(backup_path.resolve()))
+        self.assertGreater(data["bytes"], 0)
+        self.assertTrue(backup_path.exists())
+        conn = sqlite3.connect(backup_path)
+        try:
+            row = conn.execute("SELECT body FROM messages WHERE id = ?", (message["id"],)).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row[0], "backup me")
+
+    def test_backup_does_not_overwrite_without_flag(self) -> None:
+        backup_path = Path(self.tmp.name) / "peerpost-backup.sqlite"
+        self.store.backup(backup_path)
+
+        with self.assertRaises(FileExistsError):
+            self.store.backup(backup_path)
+
+        data = self.store.backup(backup_path, overwrite=True)
+        self.assertEqual(data["path"], str(backup_path.resolve()))
+
     def test_broadcast_targets_all_agents_except_sender(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")
         self.store.join_agent("codex", "codex", "dev")

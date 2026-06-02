@@ -350,6 +350,21 @@ def command_prune(args: argparse.Namespace) -> int:
     return 0
 
 
+def default_backup_path() -> Path:
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    return get_paths().home / "backups" / f"peerpost-{stamp}.sqlite"
+
+
+def command_backup(args: argparse.Namespace) -> int:
+    output = (Path(args.output).expanduser() if args.output else default_backup_path()).resolve()
+    data = client().request("backup", output=str(output), overwrite=args.overwrite)
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
+    print(f"backup: {data['path']} ({data['bytes']} bytes)")
+    return 0
+
+
 def command_paths(_args: argparse.Namespace) -> int:
     paths = get_paths()
     print(f"home: {paths.home}")
@@ -730,6 +745,12 @@ def build_parser() -> argparse.ArgumentParser:
     prune.add_argument("--apply", action="store_true", help="delete matched messages")
     prune.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     prune.set_defaults(func=command_prune)
+
+    backup = sub.add_parser("backup")
+    backup.add_argument("--output", help="backup SQLite path; default is <PEERPOST_HOME>/backups/peerpost-<timestamp>.sqlite")
+    backup.add_argument("--overwrite", action="store_true", help="replace the output file if it already exists")
+    backup.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    backup.set_defaults(func=command_backup)
 
     paths = sub.add_parser("paths")
     paths.set_defaults(func=command_paths)

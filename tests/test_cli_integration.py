@@ -445,6 +445,44 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertFalse(apply_payload["dry_run"])
         self.assertEqual(apply_payload["deleted"], 1)
 
+    def test_backup_creates_readable_sqlite_snapshot(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "snapshot me",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        backup_path = Path(self.tmp.name) / "manual-backup.sqlite"
+
+        backup = self.run_peerpost(
+            "backup",
+            "--output",
+            str(backup_path),
+            "--format",
+            "json",
+        )
+
+        self.assertEqual(backup.returncode, 0, backup.stderr)
+        payload = json.loads(backup.stdout)
+        self.assertEqual(payload["path"], str(backup_path.resolve()))
+        self.assertGreater(payload["bytes"], 0)
+        conn = sqlite3.connect(backup_path)
+        try:
+            row = conn.execute("SELECT body FROM messages WHERE id = ?", (message_id,)).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row[0], "snapshot me")
+
     def test_daemon_rejects_oversized_message_body(self) -> None:
         peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])
         with self.assertRaisesRegex(PeerpostClientError, f"body exceeds {MAX_BODY_CHARS}"):

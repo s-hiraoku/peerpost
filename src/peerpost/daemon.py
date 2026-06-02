@@ -290,6 +290,21 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                 int(request.get("limit", 100)),
                 bool(request.get("apply", False)),
             )
+        if request_type == "backup":
+            try:
+                data = store.backup(
+                    Path(self._require(request, "output")),
+                    overwrite=bool(request.get("overwrite", False)),
+                )
+            except FileExistsError as exc:
+                raise RequestError(
+                    "already_exists",
+                    f"backup output already exists: {exc}; pass --overwrite to replace it",
+                ) from exc
+            except IsADirectoryError as exc:
+                raise RequestError("bad_request", f"backup output is a directory: {exc}") from exc
+            self.server.logger.info("database backup path=%s bytes=%s", data["path"], data["bytes"])
+            return data
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
     def _send(self, request: dict[str, Any]) -> dict[str, Any]:
