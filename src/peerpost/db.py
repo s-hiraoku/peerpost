@@ -15,6 +15,7 @@ from .paths import ensure_home, get_paths, restrict_file, restrict_sqlite_files
 
 
 SCHEMA_VERSION = "1"
+ALLOWED_PRIORITIES = {"low", "normal", "high", "urgent"}
 
 
 def utc_now() -> str:
@@ -211,6 +212,8 @@ class Store:
         parent_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], list[str]]:
+        if priority not in ALLOWED_PRIORITIES:
+            raise ValueError("priority must be one of: low, normal, high, urgent")
         message_id = make_message_id()
         created_at = utc_now()
         unique_targets = sorted({target for target in targets if target and target != from_agent})

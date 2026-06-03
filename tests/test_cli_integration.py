@@ -1169,6 +1169,17 @@ class CliIntegrationTest(unittest.TestCase):
                 {"type": "backup", "output": 123},
                 "output must be a string",
             ),
+            (
+                {
+                    "type": "send",
+                    "from_agent": "claude",
+                    "to_agent": "codex",
+                    "team": "dev",
+                    "body": "hello",
+                    "priority": "later",
+                },
+                "priority must be one of",
+            ),
         ]
         for payload, error in cases:
             with self.subTest(payload=payload):

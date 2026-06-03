@@ -88,6 +88,16 @@ class DbTest(unittest.TestCase):
         self.assertEqual(drained[0].priority, "high")
         self.assertEqual(drained[0].parent_id, "msg_parent")
 
+    def test_send_rejects_unknown_priority(self) -> None:
+        with self.assertRaisesRegex(ValueError, "priority must be one of"):
+            self.store.create_message(
+                "dev",
+                "claude",
+                "please check",
+                ["codex"],
+                priority="later",
+            )
+
     def test_get_message_for_agent_does_not_mark_delivered(self) -> None:
         message, _ = self.store.create_message("dev", "claude", "hello", ["codex"])
         found = self.store.get_message_for_agent(message["id"], "codex", "dev")

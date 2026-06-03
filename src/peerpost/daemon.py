@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .db import Store
+from .db import ALLOWED_PRIORITIES, Store
 from .paths import PeerpostPaths, ensure_home, get_paths, restrict_file
 from .protocol import (
     MAX_BODY_CHARS,
@@ -219,6 +219,13 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             return default
         if not isinstance(value, str):
             raise RequestError("bad_request", f"{key} must be a string")
+        return value
+
+    def _priority(self, request: dict[str, Any]) -> str:
+        value = self._text_default(request, "priority", "normal")
+        if value not in ALLOWED_PRIORITIES:
+            allowed = ", ".join(sorted(ALLOWED_PRIORITIES))
+            raise RequestError("bad_request", f"priority must be one of: {allowed}")
         return value
 
     def _require_text_list(self, request: dict[str, Any], key: str) -> list[str]:
@@ -447,7 +454,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             body,
             targets,
             kind=self._text_default(request, "kind", "message"),
-            priority=self._text_default(request, "priority", "normal"),
+            priority=self._priority(request),
             parent_id=self._optional_text(request, "parent_id"),
         )
         return self._deliver_to_live_targets(
@@ -476,7 +483,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             body,
             targets,
             kind=self._text_default(request, "kind", "reply"),
-            priority=self._text_default(request, "priority", "normal"),
+            priority=self._priority(request),
             parent_id=parent_id,
         )
         return self._deliver_to_live_targets(

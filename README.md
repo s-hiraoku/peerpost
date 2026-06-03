@@ -280,6 +280,8 @@ peerpost send --from claude --to codex --team dev \
   "I left a follow-up on the middleware review."
 ```
 
+Priority values are `low`, `normal`, `high`, or `urgent`; malformed daemon requests using other values return `bad_request`.
+
 ## Maintenance
 
 peerpost stores messages durably in SQLite. Create a daemon-safe backup before maintenance:
