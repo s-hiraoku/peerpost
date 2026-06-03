@@ -39,6 +39,7 @@ def format_plain(messages: Iterable[Any]) -> str:
         suffix = f" ({', '.join(details)})" if details else ""
         lines.append(
             f"[{safe_field(message['created_at'])}] "
+            f"{safe_field(message['id'])} "
             f"{safe_field(message['from_agent'])} -> {safe_field(message['to_agent'])}{suffix}: {body}"
         )
     return "\n".join(lines)
@@ -49,6 +50,7 @@ def format_monitor(message: Any) -> str:
     body = indent_body(str(data["body"]), prefix="  ")
     return (
         f"peerpost | {safe_field(data['created_at'])} | {safe_field(data['team'])} | "
+        f"{safe_field(data['id'])} | "
         f"{safe_field(data['from_agent'])} \u2192 {safe_field(data['to_agent'])} | "
         f"{safe_field(data.get('priority', 'normal'))} | {body}"
     )

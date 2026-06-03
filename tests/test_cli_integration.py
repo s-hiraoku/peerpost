@@ -123,6 +123,7 @@ class CliIntegrationTest(unittest.TestCase):
             "drain", "--agent", "codex", "--team", "dev", "--format", "plain"
         )
         self.assertEqual(drained.returncode, 0, drained.stderr)
+        self.assertIn("msg_", drained.stdout)
         self.assertIn("claude -> codex: Please review the auth middleware.", drained.stdout)
 
         second = self.run_peerpost(
@@ -906,6 +907,7 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertTrue(ready, "subscriber did not emit a message")
         line = subscriber.stdout.readline()
         self.assertIn("peerpost |", line)
+        self.assertIn("msg_", line)
         self.assertIn("claude \u2192 codex", line)
         self.assertIn("Realtime ping", line)
         subscriber.terminate()

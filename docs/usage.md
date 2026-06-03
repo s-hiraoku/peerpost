@@ -55,6 +55,8 @@ Drain pending messages once:
 peerpost drain
 ```
 
+The plain output includes a `msg_...` id. Use that id, or a unique prefix of it, when replying or marking work done.
+
 Keep a live monitor open:
 
 ```sh

@@ -61,6 +61,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost status", guide)
         self.assertIn("--stdin", guide)
+        self.assertIn("plain output includes a `msg_...` id", guide)
         self.assertIn("unique message id prefix", guide)
 
     def test_decode_rejects_non_object_json(self) -> None:
@@ -85,6 +86,7 @@ class ProtocolTest(unittest.TestCase):
         )
         payload = json.loads(output)
         self.assertEqual(payload["decision"], "block")
+        self.assertIn("msg_1", payload["reason"])
         self.assertIn("please review", payload["reason"])
 
     def test_hook_formatter_includes_safety_preamble(self) -> None:
@@ -147,6 +149,20 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("claude forged -> codex", plain)
         self.assertIn("dev forged", monitor)
         self.assertIn("priority=urgent forged", reason)
+
+    def test_plain_and_monitor_formats_include_message_id(self) -> None:
+        message = {
+            "id": "msg_20260604T010203456Z_a1b2c3",
+            "team": "dev",
+            "from_agent": "claude",
+            "to_agent": "codex",
+            "body": "please review",
+            "created_at": "2026-06-04T01:02:03Z",
+            "priority": "normal",
+        }
+
+        self.assertIn("msg_20260604T010203456Z_a1b2c3", format_plain([message]))
+        self.assertIn("msg_20260604T010203456Z_a1b2c3", format_monitor(message))
 
 
 if __name__ == "__main__":

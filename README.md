@@ -128,6 +128,8 @@ Receive pending messages:
 peerpost drain --agent codex --team dev
 ```
 
+Plain and monitor output includes the message id. Use that id, or a unique prefix of it, for `reply`, `ack`, `done`, and `thread`.
+
 Reply:
 
 ```sh
