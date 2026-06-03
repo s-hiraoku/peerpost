@@ -82,7 +82,7 @@ peerpost doctor
 peerpost doctor --team dev
 ```
 
-`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, unregistered sender or recipient ids, invalid historical priority values, invalid delivery status values, and messages without delivery rows. For scripts:
+`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, unregistered sender or recipient ids, invalid historical priority values, invalid delivery status values, messages without delivery rows, and invalid metadata JSON. For scripts:
 
 ```sh
 peerpost doctor --format json
@@ -281,6 +281,8 @@ peerpost send --from claude --to codex --team dev \
 ```
 
 Priority values are `low`, `normal`, `high`, or `urgent`; malformed daemon requests using other values return `bad_request`.
+Stored metadata must be a JSON object.
+If old or manually edited metadata JSON is invalid, message reads fall back to empty metadata and `doctor --team` reports the damaged rows.
 
 ## Maintenance
 

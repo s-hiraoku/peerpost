@@ -37,6 +37,22 @@ def like_prefix(value: str) -> str:
     return f"{escaped}%"
 
 
+def parse_metadata_json(value: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(value or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def metadata_json_is_valid(value: str) -> bool:
+    try:
+        parsed = json.loads(value or "{}")
+    except json.JSONDecodeError:
+        return False
+    return isinstance(parsed, dict)
+
+
 def locked_method(method):
     def wrapper(self: "Store", *args: Any, **kwargs: Any):
         with self.lock:
@@ -75,7 +91,7 @@ class Message:
             "kind": self.kind,
             "priority": self.priority,
             "parent_id": self.parent_id,
-            "metadata": json.loads(self.metadata_json or "{}"),
+            "metadata": parse_metadata_json(self.metadata_json),
         }
 
 
@@ -215,6 +231,12 @@ class Store:
     ) -> tuple[dict[str, Any], list[str]]:
         if priority not in ALLOWED_PRIORITIES:
             raise ValueError("priority must be one of: low, normal, high, urgent")
+        if metadata is not None and not isinstance(metadata, dict):
+            raise ValueError("metadata must be a JSON object")
+        try:
+            metadata_json = json.dumps(metadata or {}, separators=(",", ":"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("metadata must be JSON serializable") from exc
         message_id = make_message_id()
         created_at = utc_now()
         unique_targets = sorted({target for target in targets if target and target != from_agent})
@@ -236,7 +258,7 @@ class Store:
                     priority,
                     parent_id,
                     created_at,
-                    json.dumps(metadata or {}, separators=(",", ":")),
+                    metadata_json,
                 ),
             )
             for target in unique_targets:
@@ -575,6 +597,30 @@ class Store:
         ).fetchall()
         invalid_priorities = [row_to_dict(row) for row in priority_rows]
 
+        metadata_rows = self.conn.execute(
+            f"""
+            SELECT team, metadata_json, created_at
+            FROM messages
+            {where_sql}
+            ORDER BY team
+            """,
+            tuple(params),
+        ).fetchall()
+        invalid_metadata_by_team: dict[str, dict[str, Any]] = {}
+        for row in metadata_rows:
+            if metadata_json_is_valid(row["metadata_json"]):
+                continue
+            item = invalid_metadata_by_team.setdefault(
+                row["team"],
+                {"team": row["team"], "total": 0, "last_message_at": row["created_at"]},
+            )
+            item["total"] += 1
+            if row["created_at"] > item["last_message_at"]:
+                item["last_message_at"] = row["created_at"]
+        invalid_metadata = [
+            invalid_metadata_by_team[key] for key in sorted(invalid_metadata_by_team)
+        ]
+
         return {
             "team": team,
             "status_counts": status_counts,
@@ -588,6 +634,8 @@ class Store:
             "messages_without_deliveries": messages_without_deliveries,
             "invalid_priority_count": len(invalid_priorities),
             "invalid_priorities": invalid_priorities,
+            "invalid_metadata_count": sum(int(item["total"]) for item in invalid_metadata),
+            "invalid_metadata": invalid_metadata,
         }
 
     @locked_method

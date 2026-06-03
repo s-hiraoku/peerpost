@@ -88,6 +88,35 @@ class DbTest(unittest.TestCase):
         self.assertEqual(drained[0].priority, "high")
         self.assertEqual(drained[0].parent_id, "msg_parent")
 
+    def test_message_as_dict_tolerates_invalid_metadata_json(self) -> None:
+        message, _ = self.store.create_message("dev", "claude", "bad metadata", ["codex"])
+        self.store.conn.execute(
+            "UPDATE messages SET metadata_json = ? WHERE id = ?",
+            ("{bad json", message["id"]),
+        )
+
+        drained = self.store.drain("codex", "dev")
+
+        self.assertEqual(drained[0].as_dict()["metadata"], {})
+
+    def test_send_rejects_invalid_metadata_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "metadata must be a JSON object"):
+            self.store.create_message(
+                "dev",
+                "claude",
+                "bad metadata",
+                ["codex"],
+                metadata=["not", "object"],  # type: ignore[arg-type]
+            )
+        with self.assertRaisesRegex(ValueError, "metadata must be JSON serializable"):
+            self.store.create_message(
+                "dev",
+                "claude",
+                "bad metadata",
+                ["codex"],
+                metadata={"bad": object()},
+            )
+
     def test_send_rejects_unknown_priority(self) -> None:
         with self.assertRaisesRegex(ValueError, "priority must be one of"):
             self.store.create_message(
@@ -304,6 +333,24 @@ class DbTest(unittest.TestCase):
         self.assertEqual(health["messages_without_delivery_count"], 1)
         self.assertEqual(health["messages_without_deliveries"][0]["team"], "dev")
         self.assertEqual(health["messages_without_deliveries"][0]["total"], 1)
+
+    def test_delivery_health_reports_invalid_metadata_json(self) -> None:
+        first, _ = self.store.create_message("dev", "claude", "bad metadata", ["codex"])
+        self.store.conn.execute(
+            "UPDATE messages SET metadata_json = ? WHERE id = ?",
+            ("{bad json", first["id"]),
+        )
+        second, _ = self.store.create_message("dev", "claude", "bad metadata 2", ["codex"])
+        self.store.conn.execute(
+            "UPDATE messages SET metadata_json = ? WHERE id = ?",
+            ('["not", "object"]', second["id"]),
+        )
+
+        health = self.store.delivery_health("dev")
+
+        self.assertEqual(health["invalid_metadata_count"], 2)
+        self.assertEqual(health["invalid_metadata"][0]["team"], "dev")
+        self.assertEqual(health["invalid_metadata"][0]["total"], 2)
 
     def test_team_status_reports_agent_delivery_counts(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")

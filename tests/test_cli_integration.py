@@ -642,6 +642,46 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(report["delivery_health"]["messages_without_delivery_count"], 1)
         self.assertEqual(report["delivery_health"]["messages_without_deliveries"][0]["team"], "dev")
 
+    def test_doctor_team_reports_invalid_metadata_json(self) -> None:
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "bad metadata",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        conn = sqlite3.connect(Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite")
+        try:
+            conn.execute(
+                "UPDATE messages SET metadata_json = ? WHERE id = ?",
+                ("{bad json", message_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        drained = self.run_peerpost("drain", "--agent", "codex", "--team", "dev", "--format", "json")
+        self.assertEqual(drained.returncode, 0, drained.stderr)
+        self.assertEqual(json.loads(drained.stdout)[0]["metadata"], {})
+
+        result = self.run_peerpost("doctor", "--team", "dev", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "warnings")
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["deliveries"]["status"], "warn")
+        self.assertIn("1 invalid metadata value(s)", checks["deliveries"]["detail"])
+        self.assertEqual(report["delivery_health"]["invalid_metadata_count"], 1)
+        self.assertEqual(report["delivery_health"]["invalid_metadata"][0]["team"], "dev")
+
     def test_doctor_suggests_daemon_start_when_not_running(self) -> None:
         self._stop_daemon()
         result = self.run_peerpost("doctor")

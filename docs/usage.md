@@ -134,6 +134,7 @@ It also reports unregistered sender and recipient ids seen in team messages.
 It also reports invalid historical priority values if an old or manually edited database contains them.
 It also reports invalid delivery status values if a database was manually edited or corrupted.
 It also reports messages without delivery rows if an old or manually edited database contains them.
+It also reports invalid metadata JSON; reads fall back to empty metadata instead of failing.
 
 Inspect recent daemon events:
 
