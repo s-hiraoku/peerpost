@@ -468,10 +468,19 @@ class Store:
             temp_path.unlink(missing_ok=True)
             raise
         restrict_file(output_path)
+        verification = sqlite3.connect(f"file:{output_path}?mode=ro", uri=True)
+        try:
+            quick_check = [
+                row[0] for row in verification.execute("PRAGMA quick_check").fetchall()
+            ]
+        finally:
+            verification.close()
         return {
             "path": str(output_path),
             "bytes": output_path.stat().st_size,
             "created_at": utc_now(),
+            "quick_check": quick_check,
+            "verified": quick_check == ["ok"],
         }
 
     @locked_method

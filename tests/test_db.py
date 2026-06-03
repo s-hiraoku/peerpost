@@ -217,6 +217,8 @@ class DbTest(unittest.TestCase):
 
         self.assertEqual(data["path"], str(backup_path.resolve()))
         self.assertGreater(data["bytes"], 0)
+        self.assertTrue(data["verified"])
+        self.assertEqual(data["quick_check"], ["ok"])
         self.assertTrue(backup_path.exists())
         conn = sqlite3.connect(backup_path)
         try:

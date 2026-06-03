@@ -577,7 +577,8 @@ def command_backup(args: argparse.Namespace) -> int:
     if args.output_format == "json":
         print(format_json(data))
         return 0
-    print(f"backup: {data['path']} ({data['bytes']} bytes)")
+    status = "verified" if data.get("verified") else "unverified"
+    print(f"backup: {data['path']} ({data['bytes']} bytes, quick_check {status})")
     return 0
 
 
