@@ -61,6 +61,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("peerpost daemon install-autostart", guide)
         self.assertIn("stale pid/socket/autostart files", readme)
         self.assertIn("stale pid and socket files", guide)
+        self.assertIn("private log/database permissions", readme)
+        self.assertIn("log file permissions", guide)
         self.assertIn("missing agent registrations", readme)
         self.assertIn("unregistered sender or recipient ids", readme)
         self.assertIn("invalid historical priority values", readme)

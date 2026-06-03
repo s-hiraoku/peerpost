@@ -1063,7 +1063,20 @@ def command_doctor(args: argparse.Namespace) -> int:
     else:
         _doctor_check(checks, "path", "info", "peerpost command was not found on PATH", "python -m pip install -e .")
 
-    _doctor_check(checks, "log", "info", str(paths.log))
+    if paths.log.exists():
+        log_mode = _mode_int(paths.log)
+        if log_mode == 0o600:
+            _doctor_check(checks, "log", "ok", f"{paths.log} mode {_mode(paths.log)}")
+        else:
+            _doctor_check(
+                checks,
+                "log",
+                "warn",
+                f"{paths.log} mode {_mode(paths.log)}; expected 0o600",
+                f"chmod 600 {paths.log}",
+            )
+    else:
+        _doctor_check(checks, "log", "info", f"{paths.log} does not exist yet")
     _doctor_autostart_check(checks)
 
     has_errors = any(check["status"] == "error" for check in checks)

@@ -458,7 +458,7 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("foreign_key_check ok", checks["database"]["detail"])
         self.assertEqual(checks["socket"]["status"], "ok")
         self.assertEqual(checks["autostart"]["status"], "info")
-        self.assertIn("log", checks)
+        self.assertEqual(checks["log"]["status"], "ok")
 
     def test_doctor_warns_about_long_socket_path(self) -> None:
         env = {
@@ -830,6 +830,28 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertFalse(pid_path.exists())
         fixed_checks = {check["name"]: check for check in fixed_report["checks"]}
         self.assertEqual(fixed_checks["pid"]["status"], "info")
+
+    def test_doctor_reports_and_repairs_log_mode(self) -> None:
+        log_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.log"
+        log_path.chmod(0o644)
+
+        warned = self.run_peerpost("doctor", "--format", "json")
+
+        self.assertEqual(warned.returncode, 0, warned.stderr)
+        warned_report = json.loads(warned.stdout)
+        warned_checks = {check["name"]: check for check in warned_report["checks"]}
+        self.assertEqual(warned_report["status"], "warnings")
+        self.assertEqual(warned_checks["log"]["status"], "warn")
+        self.assertIn("expected 0o600", warned_checks["log"]["detail"])
+
+        fixed = self.run_peerpost("doctor", "--fix", "--format", "json")
+
+        self.assertEqual(fixed.returncode, 0, fixed.stderr)
+        fixed_report = json.loads(fixed.stdout)
+        fixed_checks = {check["name"]: check for check in fixed_report["checks"]}
+        self.assertEqual(fixed_checks["log"]["status"], "ok")
+        self.assertIn(f"chmod 600 {log_path}", fixed_report["repairs"])
+        self.assertEqual(log_path.stat().st_mode & 0o777, 0o600)
 
     def test_doctor_reports_and_repairs_socket_mode(self) -> None:
         socket_path = Path(self.env["PEERPOST_SOCKET"])
