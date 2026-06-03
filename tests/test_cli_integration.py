@@ -769,6 +769,19 @@ class CliIntegrationTest(unittest.TestCase):
         strict = self.run_peerpost("doctor", "--strict")
         self.assertEqual(strict.returncode, 1)
 
+    def test_doctor_fix_repairs_home_mode(self) -> None:
+        home_path = Path(self.env["PEERPOST_HOME"])
+        home_path.chmod(0o755)
+
+        result = self.run_peerpost("doctor", "--fix", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertIn(f"chmod 700 {home_path}", report["repairs"])
+        self.assertEqual(home_path.stat().st_mode & 0o777, 0o700)
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["home"]["status"], "ok")
+
     def test_doctor_fix_repairs_database_mode(self) -> None:
         db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
         sidecars = [

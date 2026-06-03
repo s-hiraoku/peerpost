@@ -732,7 +732,12 @@ def command_doctor(args: argparse.Namespace) -> int:
         return 1
 
     repairs: list[str] = []
-    if args.fix and home_mode_before not in (None, 0o700):
+    home_mode_after_ensure = _mode_int(paths.home)
+    if (
+        args.fix
+        and home_mode_before not in (None, 0o700)
+        and home_mode_after_ensure == 0o700
+    ):
         repairs.append(f"chmod 700 {paths.home}")
     if args.fix:
         _repair_private_file(paths.db, repairs)

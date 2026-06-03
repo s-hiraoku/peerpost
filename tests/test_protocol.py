@@ -61,6 +61,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("peerpost daemon install-autostart", guide)
         self.assertIn("stale pid/socket/autostart files", readme)
         self.assertIn("stale pid and socket files", guide)
+        self.assertIn("private home directory", readme)
+        self.assertIn("home directory permissions", guide)
         self.assertIn("private log/database permissions", readme)
         self.assertIn("log file permissions", guide)
         self.assertIn("missing agent registrations", readme)
