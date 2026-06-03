@@ -137,7 +137,7 @@ peerpost inbox
 Show your history:
 
 ```sh
-peerpost history --agent "$PEERPOST_AGENT"
+peerpost history
 ```
 
 Show one conversation thread:

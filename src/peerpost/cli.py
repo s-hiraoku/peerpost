@@ -1198,7 +1198,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     history = sub.add_parser("history")
     add_team_arg(history, required=True)
-    history.add_argument("--agent")
+    add_agent_arg(history)
     history.add_argument("--with", dest="with_agent")
     history.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     history.set_defaults(func=command_history)

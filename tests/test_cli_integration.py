@@ -700,6 +700,10 @@ class CliIntegrationTest(unittest.TestCase):
             self.assertEqual(drained.returncode, 0, drained.stderr)
             self.assertIn("claude -> codex", drained.stdout)
             self.assertIn("env default hello", drained.stdout)
+
+            history = self.run_peerpost("history", "--format", "json")
+            self.assertEqual(history.returncode, 0, history.stderr)
+            self.assertEqual(json.loads(history.stdout)[0]["to_agent"], "codex")
         finally:
             if old_team is None:
                 self.env.pop("PEERPOST_TEAM", None)

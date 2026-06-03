@@ -231,7 +231,7 @@ Useful but less frequent:
 peerpost agents
 peerpost join --agent <id> --type <type>
 peerpost inbox
-peerpost history --agent "$PEERPOST_AGENT"
+peerpost history
 peerpost thread <message-id-prefix>
 peerpost leave --agent <agent>
 peerpost backup

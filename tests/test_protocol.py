@@ -59,6 +59,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("peerpost quickstart", guide)
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)
+        self.assertIn("peerpost history", guide)
         self.assertIn("peerpost status", guide)
         self.assertIn("--stdin", guide)
         self.assertIn("plain output includes a `msg_...` id", guide)
