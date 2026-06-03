@@ -385,6 +385,11 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         if request.get("broadcast"):
             targets = store.broadcast_targets(team, from_agent)
             unregistered_targets: list[str] = []
+            if not targets:
+                raise RequestError(
+                    "no_broadcast_targets",
+                    f"no registered broadcast recipients in team {team}",
+                )
         else:
             targets = [self._require(request, "to_agent")]
             unregistered_targets = [target for target in targets if store.get_agent(target, team) is None]

@@ -55,6 +55,8 @@ Broadcast to all registered agents in the team except yourself:
 peerpost send --broadcast "Standup notes are ready."
 ```
 
+Broadcast fails if no other agent is registered in the team.
+
 ## 3. Receive
 
 Drain pending messages once:

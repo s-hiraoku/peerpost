@@ -62,6 +62,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("stale autostart files", readme)
         self.assertIn("daemon autostart file", guide)
         self.assertIn("private file and socket permissions", readme)
+        self.assertIn("undeliverable empty broadcast", readme)
+        self.assertIn("Broadcast fails if no other agent is registered", guide)
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost history", guide)

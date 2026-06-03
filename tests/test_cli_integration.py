@@ -697,6 +697,28 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("to codex", sent.stdout)
         self.assertNotIn("copilot", sent.stdout)
 
+    def test_broadcast_rejects_empty_recipient_set(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--broadcast",
+            "--team",
+            "dev",
+            "nobody is listening",
+        )
+
+        self.assertEqual(sent.returncode, 1)
+        self.assertIn("no registered broadcast recipients in team dev", sent.stderr)
+        db = sqlite3.connect(Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite")
+        try:
+            count = db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        finally:
+            db.close()
+        self.assertEqual(count, 0)
+
     def test_core_commands_support_json_output(self) -> None:
         joined = self.run_peerpost(
             "join",

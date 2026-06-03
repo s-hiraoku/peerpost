@@ -266,6 +266,8 @@ Broadcast sends to every registered agent in the team except the sender:
 peerpost send --from claude --broadcast --team dev "Standup notes are ready."
 ```
 
+If no other agent is registered in the team, broadcast exits with an error instead of storing an undeliverable empty broadcast.
+
 ## Metadata
 
 Messages can carry lightweight coordination metadata:
