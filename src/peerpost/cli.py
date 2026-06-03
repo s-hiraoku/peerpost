@@ -44,6 +44,45 @@ AGENT_TYPE_ALIASES = {
 }
 
 
+def env_default(name: str) -> str | None:
+    value = os.environ.get(name)
+    return value if value else None
+
+
+def add_team_arg(
+    parser: argparse.ArgumentParser,
+    *,
+    required: bool = False,
+    default: str | None = None,
+    help: str | None = None,
+) -> None:
+    env_team = env_default("PEERPOST_TEAM")
+    parser.add_argument(
+        "--team",
+        required=required and env_team is None,
+        default=env_team or default,
+        help=help,
+    )
+
+
+def add_agent_arg(
+    parser: argparse.ArgumentParser,
+    *,
+    dest: str = "agent",
+    required: bool = False,
+    default: str | None = None,
+    help: str | None = None,
+) -> None:
+    env_agent = env_default("PEERPOST_AGENT")
+    parser.add_argument(
+        "--agent" if dest == "agent" else "--from",
+        dest=dest,
+        required=required and env_agent is None,
+        default=env_agent or default,
+        help=help,
+    )
+
+
 def eprint(message: str) -> None:
     print(message, file=sys.stderr)
 
@@ -863,6 +902,10 @@ def command_quickstart(args: argparse.Namespace) -> int:
         "registered_agents": registered_agents,
         "self_test": self_test,
         "snippets": snippets,
+        "shell_defaults": [
+            f"export PEERPOST_TEAM={shlex.quote(safe_field(args.team))}",
+            "export PEERPOST_AGENT=codex",
+        ],
         "try_commands": [
             f"peerpost send --from claude --to codex --team {shlex.quote(safe_field(args.team))} "
             "\"Please review the auth middleware.\"",
@@ -888,6 +931,10 @@ def command_quickstart(args: argparse.Namespace) -> int:
     print(f"self-test: {'ok' if self_test.get('ok') else 'failed'}")
     if not self_test.get("ok") and self_test.get("error"):
         print(f"  {safe_field(self_test['error'])}")
+    print()
+    print("optional shell defaults:")
+    for command in data["shell_defaults"]:
+        print(f"  {command}")
     print()
     print("configure receiving:")
     for item in snippets:
@@ -991,30 +1038,30 @@ def build_parser() -> argparse.ArgumentParser:
     daemon.set_defaults(func=command_daemon)
 
     join = sub.add_parser("join")
-    join.add_argument("--agent", required=True)
+    add_agent_arg(join, required=True)
     join.add_argument("--type", dest="agent_type", required=True)
-    join.add_argument("--team", required=True)
+    add_team_arg(join, required=True)
     join.add_argument("--workspace")
     join.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     join.set_defaults(func=command_join)
 
     agents = sub.add_parser("agents")
-    agents.add_argument("--team")
+    add_team_arg(agents)
     agents.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     agents.set_defaults(func=command_agents)
 
     leave = sub.add_parser("leave")
-    leave.add_argument("--agent", required=True)
-    leave.add_argument("--team", required=True)
+    add_agent_arg(leave, required=True)
+    add_team_arg(leave, required=True)
     leave.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     leave.set_defaults(func=command_leave)
 
     send = sub.add_parser("send")
-    send.add_argument("--from", dest="from_agent", required=True)
+    add_agent_arg(send, dest="from_agent", required=True)
     target = send.add_mutually_exclusive_group(required=True)
     target.add_argument("--to", dest="to_agent")
     target.add_argument("--broadcast", action="store_true")
-    send.add_argument("--team", required=True)
+    add_team_arg(send, required=True)
     send.add_argument("--kind", default="message")
     send.add_argument(
         "--priority",
@@ -1028,8 +1075,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     reply = sub.add_parser("reply")
     reply.add_argument("message_id")
-    reply.add_argument("--from", dest="from_agent", required=True)
-    reply.add_argument("--team", required=True)
+    add_agent_arg(reply, dest="from_agent", required=True)
+    add_team_arg(reply, required=True)
     reply.add_argument("--kind", default="reply")
     reply.add_argument(
         "--priority",
@@ -1041,36 +1088,36 @@ def build_parser() -> argparse.ArgumentParser:
     reply.set_defaults(func=command_reply)
 
     inbox = sub.add_parser("inbox")
-    inbox.add_argument("--agent", required=True)
-    inbox.add_argument("--team", required=True)
+    add_agent_arg(inbox, required=True)
+    add_team_arg(inbox, required=True)
     inbox.add_argument("--all", dest="include_all", action="store_true")
     inbox.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     inbox.set_defaults(func=command_inbox)
 
     read = sub.add_parser("read")
     read.add_argument("message_id")
-    read.add_argument("--agent", required=True)
-    read.add_argument("--team", required=True)
+    add_agent_arg(read, required=True)
+    add_team_arg(read, required=True)
     read.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     read.set_defaults(func=command_read)
 
     ack = sub.add_parser("ack")
     ack.add_argument("message_ids", nargs="+")
-    ack.add_argument("--agent", required=True)
-    ack.add_argument("--team", required=True)
+    add_agent_arg(ack, required=True)
+    add_team_arg(ack, required=True)
     ack.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     ack.set_defaults(func=command_ack)
 
     done = sub.add_parser("done")
     done.add_argument("message_ids", nargs="+")
-    done.add_argument("--agent", required=True)
-    done.add_argument("--team", required=True)
+    add_agent_arg(done, required=True)
+    add_team_arg(done, required=True)
     done.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     done.set_defaults(func=command_done)
 
     drain = sub.add_parser("drain")
-    drain.add_argument("--agent", required=True)
-    drain.add_argument("--team", required=True)
+    add_agent_arg(drain, required=True)
+    add_team_arg(drain, required=True)
     drain.add_argument("--limit", type=int, default=20)
     drain.add_argument(
         "--format",
@@ -1081,8 +1128,8 @@ def build_parser() -> argparse.ArgumentParser:
     drain.set_defaults(func=command_drain)
 
     subscribe = sub.add_parser("subscribe")
-    subscribe.add_argument("--agent", required=True)
-    subscribe.add_argument("--team", required=True)
+    add_agent_arg(subscribe, required=True)
+    add_team_arg(subscribe, required=True)
     subscribe.add_argument("--include-backlog", action="store_true")
     subscribe.add_argument(
         "--format",
@@ -1093,7 +1140,7 @@ def build_parser() -> argparse.ArgumentParser:
     subscribe.set_defaults(func=command_subscribe)
 
     history = sub.add_parser("history")
-    history.add_argument("--team", required=True)
+    add_team_arg(history, required=True)
     history.add_argument("--agent")
     history.add_argument("--with", dest="with_agent")
     history.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
@@ -1101,12 +1148,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     thread = sub.add_parser("thread")
     thread.add_argument("message_id")
-    thread.add_argument("--team", required=True)
+    add_team_arg(thread, required=True)
     thread.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     thread.set_defaults(func=command_thread)
 
     prune = sub.add_parser("prune")
-    prune.add_argument("--team")
+    add_team_arg(prune)
     prune.add_argument("--older-than-days", type=int, default=30)
     prune.add_argument("--before", help="UTC ISO timestamp cutoff, e.g. 2026-06-01T00:00:00Z")
     prune.add_argument("--limit", type=int, default=100)
@@ -1129,7 +1176,7 @@ def build_parser() -> argparse.ArgumentParser:
     logs.set_defaults(func=command_logs)
 
     doctor = sub.add_parser("doctor")
-    doctor.add_argument("--team", help="also check delivery health for one team")
+    add_team_arg(doctor, help="also check delivery health for one team")
     doctor.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     doctor.add_argument("--strict", action="store_true", help="return nonzero when warnings are present")
     doctor.add_argument(
@@ -1151,17 +1198,17 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="agent adapter or daemon autostart snippet to print",
     )
-    snippets.add_argument("--team", default="dev")
+    add_team_arg(snippets, default="dev")
     snippets.add_argument("--agent", help="override the agent id used in the snippet")
     snippets.set_defaults(func=command_install_snippets)
 
     quickstart = sub.add_parser("quickstart")
-    quickstart.add_argument("--team", default="dev")
+    add_team_arg(quickstart, default="dev")
     quickstart.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     quickstart.set_defaults(func=command_quickstart)
 
     setup = sub.add_parser("setup")
-    setup.add_argument("--team", default="dev")
+    add_team_arg(setup, default="dev")
     setup.add_argument(
         "--adapter",
         choices=[*SNIPPET_ADAPTERS, "all"],

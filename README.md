@@ -37,6 +37,15 @@ peerpost quickstart
 
 This creates the local state directory, starts `peerpostd` if needed, registers `claude`, `codex`, and `copilot`, runs a self-test, prints the active paths, and shows the minimum receive commands for Claude Code, Codex CLI, and Copilot CLI. It does not edit Claude, Codex, Copilot, or Antigravity config files.
 
+To reduce repeated flags in one shell, set defaults:
+
+```sh
+export PEERPOST_TEAM=dev
+export PEERPOST_AGENT=codex
+```
+
+With these set, commands such as `peerpost drain`, `peerpost subscribe --format monitor`, `peerpost done <message-id>`, and `peerpost send --to claude "message"` use the current team and agent automatically. You can still pass `--team`, `--agent`, or `--from` explicitly when needed.
+
 Use a custom team name if needed:
 
 ```sh
@@ -188,13 +197,15 @@ These are the main commands needed for day-to-day use:
 
 ```sh
 peerpost quickstart
+export PEERPOST_TEAM=dev
+export PEERPOST_AGENT=codex
 peerpost doctor
 peerpost logs --tail 50
-peerpost send --from <agent> --to <agent> --team dev "message"
-peerpost drain --agent <agent> --team dev
-peerpost subscribe --agent <agent> --team dev --format monitor
-peerpost reply <message-id> --from <agent> --team dev "message"
-peerpost done <message-id> --agent <agent> --team dev
+peerpost send --to claude "message"
+peerpost drain
+peerpost subscribe --format monitor
+peerpost reply <message-id> "message"
+peerpost done <message-id>
 ```
 
 Useful but less frequent:

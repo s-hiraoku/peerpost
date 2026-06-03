@@ -545,8 +545,43 @@ class CliIntegrationTest(unittest.TestCase):
         plain = self.run_peerpost("quickstart", "--team", "dev")
         self.assertEqual(plain.returncode, 0, plain.stderr)
         self.assertIn("peerpost quickstart", plain.stdout)
+        self.assertIn("optional shell defaults:", plain.stdout)
+        self.assertIn("export PEERPOST_TEAM=dev", plain.stdout)
         self.assertIn("configure receiving:", plain.stdout)
         self.assertIn("peerpost send --from claude --to codex --team dev", plain.stdout)
+
+    def test_env_defaults_reduce_required_team_and_agent_flags(self) -> None:
+        old_team = self.env.get("PEERPOST_TEAM")
+        old_agent = self.env.get("PEERPOST_AGENT")
+        try:
+            self.env["PEERPOST_TEAM"] = "dev"
+            self.env["PEERPOST_AGENT"] = "claude"
+            joined_claude = self.run_peerpost("join", "--type", "claude-code")
+            self.assertEqual(joined_claude.returncode, 0, joined_claude.stderr)
+
+            self.env["PEERPOST_AGENT"] = "codex"
+            joined_codex = self.run_peerpost("join", "--type", "codex")
+            self.assertEqual(joined_codex.returncode, 0, joined_codex.stderr)
+
+            self.env["PEERPOST_AGENT"] = "claude"
+            sent = self.run_peerpost("send", "--to", "codex", "env default hello")
+            self.assertEqual(sent.returncode, 0, sent.stderr)
+            self.assertIn("sent msg_", sent.stdout)
+
+            self.env["PEERPOST_AGENT"] = "codex"
+            drained = self.run_peerpost("drain")
+            self.assertEqual(drained.returncode, 0, drained.stderr)
+            self.assertIn("claude -> codex", drained.stdout)
+            self.assertIn("env default hello", drained.stdout)
+        finally:
+            if old_team is None:
+                self.env.pop("PEERPOST_TEAM", None)
+            else:
+                self.env["PEERPOST_TEAM"] = old_team
+            if old_agent is None:
+                self.env.pop("PEERPOST_AGENT", None)
+            else:
+                self.env["PEERPOST_AGENT"] = old_agent
 
     def test_setup_can_include_daemon_autostart_snippet(self) -> None:
         result = self.run_peerpost(
