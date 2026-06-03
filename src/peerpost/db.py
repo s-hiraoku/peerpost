@@ -423,11 +423,18 @@ class Store:
             raise IsADirectoryError(str(output_path))
         if output_path.exists() and not overwrite:
             raise FileExistsError(str(output_path))
-        destination = sqlite3.connect(output_path)
+        temp_path = output_path.with_name(f".{output_path.name}.tmp-{secrets.token_hex(4)}")
         try:
-            self.conn.backup(destination)
-        finally:
-            destination.close()
+            destination = sqlite3.connect(temp_path)
+            try:
+                self.conn.backup(destination)
+            finally:
+                destination.close()
+            restrict_file(temp_path)
+            temp_path.replace(output_path)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
         restrict_file(output_path)
         return {
             "path": str(output_path),

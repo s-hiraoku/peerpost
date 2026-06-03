@@ -171,6 +171,7 @@ class DbTest(unittest.TestCase):
         finally:
             conn.close()
         self.assertEqual(row[0], "backup me")
+        self.assertEqual(list(backup_path.parent.glob(f".{backup_path.name}.tmp-*")), [])
 
     def test_backup_does_not_overwrite_without_flag(self) -> None:
         backup_path = Path(self.tmp.name) / "peerpost-backup.sqlite"
@@ -181,6 +182,20 @@ class DbTest(unittest.TestCase):
 
         data = self.store.backup(backup_path, overwrite=True)
         self.assertEqual(data["path"], str(backup_path.resolve()))
+
+    def test_backup_removes_temporary_file_after_failure(self) -> None:
+        class FailingConnection:
+            def backup(self, _destination: sqlite3.Connection) -> None:
+                raise sqlite3.Error("backup failed")
+
+        backup_path = Path(self.tmp.name) / "failed.sqlite"
+        store = Store(FailingConnection())  # type: ignore[arg-type]
+
+        with self.assertRaises(sqlite3.Error):
+            store.backup(backup_path)
+
+        self.assertFalse(backup_path.exists())
+        self.assertEqual(list(backup_path.parent.glob(f".{backup_path.name}.tmp-*")), [])
 
     def test_self_test_exercises_delivery_path_without_persisting_artifacts(self) -> None:
         before_agents = self.store.conn.execute("SELECT COUNT(*) FROM agents").fetchone()[0]

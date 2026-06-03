@@ -73,6 +73,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("sender or direct recipient id is not registered", guide)
         self.assertIn("agent-list, and plain log output strips ANSI", readme)
         self.assertIn("future cutoffs", readme)
+        self.assertIn("temporary file first", readme)
         self.assertIn("positive age or past `--before` timestamp", guide)
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)

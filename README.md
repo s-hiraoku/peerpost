@@ -293,6 +293,7 @@ peerpost backup --output ~/peerpost-backup.sqlite
 ```
 
 Existing backup files are not overwritten unless you pass `--overwrite`.
+Backups are written to a temporary file first and moved into place only after SQLite finishes the backup.
 
 To see old completed messages that can be removed:
 
