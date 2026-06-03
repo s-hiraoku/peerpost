@@ -99,6 +99,16 @@ def daemon_ping() -> dict[str, Any] | None:
         return None
 
 
+def _pid_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def start_daemon_background() -> dict[str, Any] | None:
     paths = ensure_home(get_paths())
     data = daemon_ping()
@@ -780,11 +790,9 @@ def command_doctor(args: argparse.Namespace) -> int:
             "peerpost setup --start-daemon",
         )
 
-    pid_detail = paths.pid.read_text(encoding="utf-8").strip() if paths.pid.exists() else "missing"
-    _doctor_check(checks, "pid", "ok" if paths.pid.exists() else "info", str(pid_detail))
-
     daemon_running = False
     daemon_version: str | None = None
+    daemon_pid: int | None = None
     try:
         data = client().request("ping")
     except DaemonNotRunning:
@@ -794,6 +802,8 @@ def command_doctor(args: argparse.Namespace) -> int:
     else:
         daemon_running = True
         daemon_version = data.get("version")
+        raw_daemon_pid = data.get("pid")
+        daemon_pid = raw_daemon_pid if isinstance(raw_daemon_pid, int) else None
         daemon_detail = f"running pid {data.get('pid')} version {daemon_version or 'unknown'}"
         _doctor_check(checks, "daemon", "ok", daemon_detail)
         if daemon_version is None:
@@ -814,6 +824,79 @@ def command_doctor(args: argparse.Namespace) -> int:
             )
         else:
             _doctor_check(checks, "version", "ok", f"cli {__version__}; daemon {daemon_version}")
+
+    if args.fix and paths.pid.exists() and not daemon_running:
+        try:
+            paths.pid.unlink()
+        except OSError as exc:
+            _doctor_check(
+                checks,
+                "pid",
+                "warn",
+                f"{paths.pid} exists but could not be removed: {exc}",
+                f"rm -f {paths.pid}; peerpost daemon start",
+            )
+        else:
+            repairs.append(f"removed stale pid {paths.pid}")
+
+    if paths.pid.exists():
+        pid_text = paths.pid.read_text(encoding="utf-8").strip()
+        try:
+            pid_value = int(pid_text)
+        except ValueError:
+            if daemon_running:
+                _doctor_check(
+                    checks,
+                    "pid",
+                    "warn",
+                    f"{paths.pid} contains invalid pid {safe_field(pid_text)!r}",
+                    "peerpost daemon stop; peerpost daemon start",
+                )
+            else:
+                _doctor_check(
+                    checks,
+                    "pid",
+                    "warn",
+                    f"{paths.pid} contains invalid pid {safe_field(pid_text)!r}",
+                    f"rm -f {paths.pid}; peerpost daemon start",
+                )
+        else:
+            if daemon_running and daemon_pid == pid_value:
+                _doctor_check(checks, "pid", "ok", f"{paths.pid}: {pid_value}")
+            elif daemon_running:
+                _doctor_check(
+                    checks,
+                    "pid",
+                    "warn",
+                    f"{paths.pid}: {pid_value}; daemon reports pid {daemon_pid}",
+                    "peerpost daemon stop; peerpost daemon start",
+                )
+            elif _pid_is_running(pid_value):
+                _doctor_check(
+                    checks,
+                    "pid",
+                    "warn",
+                    f"{paths.pid}: {pid_value}; peerpostd is not responding",
+                    f"rm -f {paths.pid}; peerpost daemon start",
+                )
+            else:
+                _doctor_check(
+                    checks,
+                    "pid",
+                    "warn",
+                    f"{paths.pid}: {pid_value}; process is not running",
+                    f"rm -f {paths.pid}; peerpost daemon start",
+                )
+    elif daemon_running:
+        _doctor_check(
+            checks,
+            "pid",
+            "warn",
+            f"{paths.pid} is missing while peerpostd is running",
+            "peerpost daemon stop; peerpost daemon start",
+        )
+    else:
+        _doctor_check(checks, "pid", "info", f"{paths.pid} is missing")
 
     self_test: dict[str, Any] | None = None
     if args.self_test:

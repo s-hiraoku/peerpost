@@ -452,6 +452,7 @@ class CliIntegrationTest(unittest.TestCase):
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["daemon"]["status"], "ok")
         self.assertEqual(checks["version"]["status"], "ok")
+        self.assertEqual(checks["pid"]["status"], "ok")
         self.assertEqual(checks["database"]["status"], "ok")
         self.assertIn("quick_check ok", checks["database"]["detail"])
         self.assertIn("foreign_key_check ok", checks["database"]["detail"])
@@ -756,6 +757,29 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertFalse(socket_path.exists())
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["socket"]["status"], "info")
+
+    def test_doctor_fix_removes_stale_pid(self) -> None:
+        self._stop_daemon()
+        pid_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.pid"
+        pid_path.write_text("999999999\n", encoding="utf-8")
+        pid_path.chmod(0o600)
+
+        warned = self.run_peerpost("doctor", "--format", "json")
+        self.assertEqual(warned.returncode, 0, warned.stderr)
+        warned_report = json.loads(warned.stdout)
+        warned_checks = {check["name"]: check for check in warned_report["checks"]}
+        self.assertEqual(warned_report["status"], "warnings")
+        self.assertEqual(warned_checks["pid"]["status"], "warn")
+        self.assertIn("process is not running", warned_checks["pid"]["detail"])
+
+        fixed = self.run_peerpost("doctor", "--fix", "--format", "json")
+
+        self.assertEqual(fixed.returncode, 0, fixed.stderr)
+        fixed_report = json.loads(fixed.stdout)
+        self.assertIn(f"removed stale pid {pid_path}", fixed_report["repairs"])
+        self.assertFalse(pid_path.exists())
+        fixed_checks = {check["name"]: check for check in fixed_report["checks"]}
+        self.assertEqual(fixed_checks["pid"]["status"], "info")
 
     def test_doctor_reports_and_repairs_socket_mode(self) -> None:
         socket_path = Path(self.env["PEERPOST_SOCKET"])

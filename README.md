@@ -82,7 +82,7 @@ peerpost doctor
 peerpost doctor --team dev
 ```
 
-`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, unregistered sender or recipient ids, invalid historical priority values, invalid delivery status values, messages without delivery rows, and invalid metadata JSON. For scripts:
+`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale pid/socket/autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, unregistered sender or recipient ids, invalid historical priority values, invalid delivery status values, messages without delivery rows, and invalid metadata JSON. For scripts:
 
 ```sh
 peerpost doctor --format json
@@ -95,7 +95,7 @@ To repair safe local filesystem issues such as permissions and stale socket file
 peerpost doctor --fix
 ```
 
-This can restore private database, SQLite sidecar, log, pid, and socket permissions and remove stale socket files when the daemon is not running. `doctor` also runs SQLite `quick_check` and `foreign_key_check` and reports database corruption or referential integrity problems separately from permission issues.
+This can restore private database, SQLite sidecar, log, pid, and socket permissions and remove stale pid or socket files when the daemon is not running. `doctor` also runs SQLite `quick_check` and `foreign_key_check` and reports database corruption or referential integrity problems separately from permission issues.
 
 To verify daemon, SQLite storage, and pending-to-delivered message flow without leaving test messages behind:
 
