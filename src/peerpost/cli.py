@@ -21,7 +21,7 @@ from . import __version__
 from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
 from .formatters import format_drain, format_json, format_monitor, format_plain
 from .paths import ensure_home, get_paths, restrict_file
-from .security import safe_field
+from .security import safe_field, strip_control_chars
 
 
 KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"}
@@ -262,7 +262,7 @@ def command_agents(args: argparse.Namespace) -> int:
         print("no agents registered")
         return 0
     for agent in agents:
-        workspace = f" {agent['workspace']}" if agent.get("workspace") else ""
+        workspace = f" {safe_field(agent['workspace'])}" if agent.get("workspace") else ""
         print(
             f"{safe_field(agent['team'])}/{safe_field(agent['id'])} "
             f"{safe_field(agent['agent_type'])}{workspace}"
@@ -566,7 +566,7 @@ def command_logs(args: argparse.Namespace) -> int:
         print(format_json({"path": str(paths.log), "lines": lines}))
     else:
         for line in lines:
-            print(line)
+            print(strip_control_chars(line))
     return 0
 
 

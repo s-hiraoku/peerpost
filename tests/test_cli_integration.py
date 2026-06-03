@@ -137,6 +137,27 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(second.stdout, "")
 
+    def test_agents_plain_output_sanitizes_workspace(self) -> None:
+        joined = self.run_peerpost(
+            "join",
+            "--agent",
+            "claude",
+            "--type",
+            "claude-code",
+            "--team",
+            "dev",
+            "--workspace",
+            "\x1b[31m/tmp/project\x1b[0m\nforged",
+        )
+        self.assertEqual(joined.returncode, 0, joined.stderr)
+
+        agents = self.run_peerpost("agents", "--team", "dev")
+
+        self.assertEqual(agents.returncode, 0, agents.stderr)
+        self.assertNotIn("\x1b", agents.stdout)
+        self.assertNotIn("project\nforged", agents.stdout)
+        self.assertIn("/tmp/project forged", agents.stdout)
+
     def test_send_warns_for_unregistered_direct_recipient(self) -> None:
         sent = self.run_peerpost(
             "send",
@@ -625,6 +646,18 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("peerpostd starting", text)
         self.assertIn("message stored id=msg_", text)
         self.assertNotIn("secret body should not be logged", text)
+
+    def test_logs_plain_output_strips_control_characters(self) -> None:
+        log_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.log"
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write("unsafe \x1b[31mred\x1b[0m \x07line\n")
+
+        result = self.run_peerpost("logs", "--tail", "1")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("\x1b", result.stdout)
+        self.assertNotIn("\x07", result.stdout)
+        self.assertIn("unsafe red line", result.stdout)
 
     def test_install_snippets_prints_adapter_commands(self) -> None:
         codex = self.run_peerpost(
