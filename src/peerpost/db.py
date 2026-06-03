@@ -16,6 +16,7 @@ from .paths import ensure_home, get_paths, restrict_file, restrict_sqlite_files
 
 SCHEMA_VERSION = "1"
 ALLOWED_PRIORITIES = {"low", "normal", "high", "urgent"}
+ALLOWED_DELIVERY_STATUSES = {"pending", "delivered", "acknowledged", "done"}
 
 
 def utc_now() -> str:
@@ -470,6 +471,25 @@ class Store:
         ).fetchall()
         status_counts = {row["status"]: row["count"] for row in status_rows}
 
+        invalid_status_clauses = [
+            f"status NOT IN ({','.join('?' for _ in ALLOWED_DELIVERY_STATUSES)})"
+        ]
+        invalid_status_params: list[Any] = sorted(ALLOWED_DELIVERY_STATUSES)
+        if team:
+            invalid_status_clauses.append("team = ?")
+            invalid_status_params.append(team)
+        invalid_status_rows = self.conn.execute(
+            f"""
+            SELECT team, status, COUNT(*) AS total, MAX(delivered_at) AS last_delivered_at
+            FROM deliveries
+            WHERE {' AND '.join(invalid_status_clauses)}
+            GROUP BY team, status
+            ORDER BY team, status
+            """,
+            tuple(invalid_status_params),
+        ).fetchall()
+        invalid_statuses = [row_to_dict(row) for row in invalid_status_rows]
+
         orphan_clauses = ["a.id IS NULL", "d.status != 'done'"]
         orphan_params: list[Any] = []
         if team:
@@ -535,6 +555,8 @@ class Store:
         return {
             "team": team,
             "status_counts": status_counts,
+            "invalid_status_count": len(invalid_statuses),
+            "invalid_statuses": invalid_statuses,
             "orphan_count": len(orphans),
             "orphans": orphans,
             "unregistered_sender_count": len(unregistered_senders),

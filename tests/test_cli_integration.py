@@ -572,6 +572,42 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(report["delivery_health"]["invalid_priority_count"], 1)
         self.assertEqual(report["delivery_health"]["invalid_priorities"][0]["priority"], "later")
 
+    def test_doctor_team_reports_invalid_delivery_status(self) -> None:
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "bad historical status",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        conn = sqlite3.connect(Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite")
+        try:
+            conn.execute(
+                "UPDATE deliveries SET status = ? WHERE message_id = ?",
+                ("lost", message_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = self.run_peerpost("doctor", "--team", "dev", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "warnings")
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["deliveries"]["status"], "warn")
+        self.assertIn("1 invalid delivery status value(s)", checks["deliveries"]["detail"])
+        self.assertEqual(report["delivery_health"]["invalid_status_count"], 1)
+        self.assertEqual(report["delivery_health"]["invalid_statuses"][0]["status"], "lost")
+
     def test_doctor_suggests_daemon_start_when_not_running(self) -> None:
         self._stop_daemon()
         result = self.run_peerpost("doctor")

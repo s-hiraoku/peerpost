@@ -262,6 +262,19 @@ class DbTest(unittest.TestCase):
         self.assertEqual(health["invalid_priorities"][0]["priority"], "later")
         self.assertEqual(health["invalid_priorities"][0]["total"], 1)
 
+    def test_delivery_health_reports_invalid_delivery_statuses(self) -> None:
+        message, _ = self.store.create_message("dev", "claude", "ok", ["codex"])
+        self.store.conn.execute(
+            "UPDATE deliveries SET status = ? WHERE message_id = ?",
+            ("lost", message["id"]),
+        )
+
+        health = self.store.delivery_health("dev")
+
+        self.assertEqual(health["invalid_status_count"], 1)
+        self.assertEqual(health["invalid_statuses"][0]["status"], "lost")
+        self.assertEqual(health["invalid_statuses"][0]["total"], 1)
+
     def test_team_status_reports_agent_delivery_counts(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")
         self.store.join_agent("codex", "codex", "dev")

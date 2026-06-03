@@ -131,6 +131,7 @@ peerpost doctor --self-test
 With `--team`, it also reports whether that team has registered agents.
 It also reports unregistered sender and recipient ids seen in team messages.
 It also reports invalid historical priority values if an old or manually edited database contains them.
+It also reports invalid delivery status values if a database was manually edited or corrupted.
 
 Inspect recent daemon events:
 
