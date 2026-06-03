@@ -36,6 +36,8 @@ def format_plain(messages: Iterable[Any]) -> str:
             details.append(f"kind={safe_field(message['kind'])}")
         if message.get("parent_id"):
             details.append(f"reply_to={safe_field(message['parent_id'])}")
+        if message.get("status") and message.get("status") != "pending":
+            details.append(f"status={safe_field(message['status'])}")
         suffix = f" ({', '.join(details)})" if details else ""
         lines.append(
             f"[{safe_field(message['created_at'])}] "

@@ -638,6 +638,18 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(codex["pending"], 1)
         self.assertEqual(data["unregistered"][0]["to_agent"], "cdoex")
 
+    def test_inbox_plain_output_shows_delivered_status(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        self.run_peerpost("send", "--from", "claude", "--to", "codex", "--team", "dev", "check status")
+        self.run_peerpost("drain", "--agent", "codex", "--team", "dev")
+
+        inbox = self.run_peerpost("inbox", "--agent", "codex", "--team", "dev")
+
+        self.assertEqual(inbox.returncode, 0, inbox.stderr)
+        self.assertIn("status=delivered", inbox.stdout)
+        self.assertIn("check status", inbox.stdout)
+
     def test_setup_reports_paths_daemon_and_snippets(self) -> None:
         result = self.run_peerpost("setup", "--team", "dev", "--format", "json")
         self.assertEqual(result.returncode, 0, result.stderr)

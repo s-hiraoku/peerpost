@@ -165,6 +165,23 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("msg_20260604T010203456Z_a1b2c3", format_plain([message]))
         self.assertIn("msg_20260604T010203456Z_a1b2c3", format_monitor(message))
 
+    def test_plain_format_shows_non_pending_delivery_status(self) -> None:
+        message = {
+            "id": "msg_1",
+            "team": "dev",
+            "from_agent": "claude",
+            "to_agent": "codex",
+            "body": "please review",
+            "created_at": "2026-06-04T01:02:03Z",
+            "priority": "normal",
+            "status": "delivered",
+        }
+        delivered = format_plain([message])
+        pending = format_plain([{**message, "status": "pending"}])
+
+        self.assertIn("status=delivered", delivered)
+        self.assertNotIn("status=pending", pending)
+
 
 if __name__ == "__main__":
     unittest.main()

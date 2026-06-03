@@ -134,6 +134,8 @@ Show your inbox:
 peerpost inbox
 ```
 
+Messages already drained or acknowledged show `status=...` in plain output.
+
 Show your history:
 
 ```sh
