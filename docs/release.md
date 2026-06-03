@@ -29,6 +29,7 @@ export PEERPOST_SOCKET="/tmp/peerpost-release-$USER.sock"
 peerpost quickstart --team dev
 peerpost doctor --self-test
 peerpost send --from claude --to codex --team dev "release smoke test"
+peerpost status --team dev
 peerpost drain --agent codex --team dev
 peerpost backup
 peerpost daemon stop
@@ -37,6 +38,7 @@ peerpost daemon stop
 Confirm:
 
 - `doctor --self-test` reports `status: ok`.
+- `status --team dev` shows a pending delivery for `codex`.
 - The drain output contains the smoke-test message once.
 - A backup SQLite file is created.
 - `peerpost daemon stop` shuts down cleanly.

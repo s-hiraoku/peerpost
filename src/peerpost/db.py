@@ -30,6 +30,11 @@ def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {key: row[key] for key in row.keys()}
 
 
+def like_prefix(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"{escaped}%"
+
+
 def locked_method(method):
     def wrapper(self: "Store", *args: Any, **kwargs: Any):
         with self.lock:
@@ -657,6 +662,53 @@ class Store:
             "m.id = ? AND d.team = ? AND d.to_agent = ?", (message_id, team, agent_id)
         )
         return messages[0] if messages else None
+
+    @locked_method
+    def matching_message_ids(
+        self, team: str, message_id_or_prefix: str, agent_id: str | None = None, limit: int = 2
+    ) -> list[str]:
+        if agent_id:
+            exact = self.conn.execute(
+                """
+                SELECT m.id
+                FROM messages m
+                JOIN deliveries d ON d.message_id = m.id
+                WHERE m.team = ? AND d.team = ? AND d.to_agent = ? AND m.id = ?
+                """,
+                (team, team, agent_id, message_id_or_prefix),
+            ).fetchall()
+            if exact:
+                return [row["id"] for row in exact]
+            rows = self.conn.execute(
+                """
+                SELECT m.id
+                FROM messages m
+                JOIN deliveries d ON d.message_id = m.id
+                WHERE m.team = ? AND d.team = ? AND d.to_agent = ?
+                  AND m.id LIKE ? ESCAPE '\\'
+                ORDER BY m.id
+                LIMIT ?
+                """,
+                (team, team, agent_id, like_prefix(message_id_or_prefix), limit),
+            ).fetchall()
+        else:
+            exact = self.conn.execute(
+                "SELECT id FROM messages WHERE team = ? AND id = ?",
+                (team, message_id_or_prefix),
+            ).fetchall()
+            if exact:
+                return [row["id"] for row in exact]
+            rows = self.conn.execute(
+                """
+                SELECT id
+                FROM messages
+                WHERE team = ? AND id LIKE ? ESCAPE '\\'
+                ORDER BY id
+                LIMIT ?
+                """,
+                (team, like_prefix(message_id_or_prefix), limit),
+            ).fetchall()
+        return [row["id"] for row in rows]
 
     @locked_method
     def mark_delivered(self, message_ids: Iterable[str], agent_id: str, team: str) -> None:

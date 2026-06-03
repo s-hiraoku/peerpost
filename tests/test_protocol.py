@@ -48,8 +48,19 @@ class ProtocolTest(unittest.TestCase):
     def test_release_checklist_documents_runtime_smoke_test(self) -> None:
         checklist = (ROOT / "docs" / "release.md").read_text(encoding="utf-8")
         self.assertIn("peerpost doctor --self-test", checklist)
+        self.assertIn("peerpost status --team dev", checklist)
         self.assertIn("peerpost backup", checklist)
         self.assertIn("peerpost daemon stop", checklist)
+
+    def test_usage_guide_documents_daily_workflow(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        guide = (ROOT / "docs" / "usage.md").read_text(encoding="utf-8")
+        self.assertIn("[Usage Guide](docs/usage.md)", readme)
+        self.assertIn("peerpost quickstart", guide)
+        self.assertIn("export PEERPOST_TEAM=dev", guide)
+        self.assertIn("peerpost drain", guide)
+        self.assertIn("peerpost status", guide)
+        self.assertIn("unique message id prefix", guide)
 
     def test_decode_rejects_non_object_json(self) -> None:
         with self.assertRaises(ProtocolError):

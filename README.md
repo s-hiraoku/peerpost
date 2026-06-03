@@ -27,6 +27,8 @@ peerpostd
 
 peerpost has no runtime dependencies outside the Python standard library.
 
+For day-to-day command examples, see [Usage Guide](docs/usage.md). For agent hook and monitor setup, see [Adapter Setup](docs/adapters.md).
+
 ## Fast Setup On This PC
 
 Run quickstart once:
@@ -132,6 +134,12 @@ Mark work done:
 peerpost done msg_20260530T123456789Z_a1b2c3 --agent codex --team dev
 ```
 
+For `read`, `reply`, `ack`, `done`, and `thread`, a unique message id prefix is enough:
+
+```sh
+peerpost done msg_20260530T123456
+```
+
 ## Live Receiving
 
 For an agent or monitor process that stays open:
@@ -212,13 +220,12 @@ peerpost done <message-id>
 Useful but less frequent:
 
 ```sh
-peerpost agents --team dev
-peerpost status --team dev
-peerpost join --agent <id> --type <type> --team dev
-peerpost inbox --agent <agent> --team dev
-peerpost history --team dev --agent <agent>
-peerpost thread <message-id> --team dev
-peerpost leave --agent <agent> --team dev
+peerpost agents
+peerpost join --agent <id> --type <type>
+peerpost inbox
+peerpost history --agent "$PEERPOST_AGENT"
+peerpost thread <message-id-prefix>
+peerpost leave --agent <agent>
 peerpost backup
 peerpost paths
 peerpost logs --tail 50

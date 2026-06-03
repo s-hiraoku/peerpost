@@ -242,28 +242,34 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             )
             return [message.as_dict() for message in messages]
         if request_type == "read":
+            team = self._require(request, "team")
+            agent = self._require(request, "agent")
             message = store.read_message(
-                self._require(request, "message_id"),
-                self._require(request, "agent"),
-                self._require(request, "team"),
+                self._resolve_message_id(team, self._require(request, "message_id"), agent),
+                agent,
+                team,
             )
             if message is None:
                 raise RequestError("not_found", "message not found for this agent/team")
             return message.as_dict()
         if request_type == "ack":
+            team = self._require(request, "team")
+            agent = self._require(request, "agent")
             return {
                 "updated": store.ack(
-                    self._require(request, "message_ids"),
-                    self._require(request, "agent"),
-                    self._require(request, "team"),
+                    self._resolve_message_ids(team, self._require(request, "message_ids"), agent),
+                    agent,
+                    team,
                 )
             }
         if request_type == "done":
+            team = self._require(request, "team")
+            agent = self._require(request, "agent")
             return {
                 "updated": store.done(
-                    self._require(request, "message_ids"),
-                    self._require(request, "agent"),
-                    self._require(request, "team"),
+                    self._resolve_message_ids(team, self._require(request, "message_ids"), agent),
+                    agent,
+                    team,
                 )
             }
         if request_type == "drain":
@@ -277,9 +283,10 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             messages = store.history(request["team"], request.get("agent"), request.get("with_agent"))
             return [message.as_dict() for message in messages]
         if request_type == "thread":
+            team = self._require(request, "team")
             messages = store.thread(
-                self._require(request, "team"),
-                self._require(request, "message_id"),
+                team,
+                self._resolve_message_id(team, self._require(request, "message_id"), None),
             )
             if not messages:
                 raise RequestError("not_found", "message thread not found for this team")
@@ -316,6 +323,25 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             return store.team_status(self._require(request, "team"))
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
+    def _resolve_message_id(
+        self, team: str, message_id_or_prefix: str, agent: str | None = None
+    ) -> str:
+        matches = self.server.store.matching_message_ids(team, message_id_or_prefix, agent)
+        if len(matches) > 1:
+            raise RequestError(
+                "ambiguous_message_id",
+                f"message id prefix matches multiple messages: {message_id_or_prefix}",
+            )
+        return matches[0] if matches else message_id_or_prefix
+
+    def _resolve_message_ids(
+        self, team: str, message_ids_or_prefixes: list[str], agent: str | None = None
+    ) -> list[str]:
+        return [
+            self._resolve_message_id(team, message_id_or_prefix, agent)
+            for message_id_or_prefix in message_ids_or_prefixes
+        ]
+
     def _send(self, request: dict[str, Any]) -> dict[str, Any]:
         store = self.server.store
         team = self._require(request, "team")
@@ -342,7 +368,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         store = self.server.store
         team = self._require(request, "team")
         from_agent = self._require(request, "from_agent")
-        parent_id = self._require(request, "message_id")
+        parent_id = self._resolve_message_id(team, self._require(request, "message_id"), from_agent)
         body = self._require_body(request)
         parent = store.get_message_for_agent(parent_id, from_agent, team)
         if parent is None:

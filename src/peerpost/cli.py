@@ -323,9 +323,10 @@ def command_reply(args: argparse.Namespace) -> int:
         print(format_json(data))
         return 0
     targets = ", ".join(safe_field(target) for target in data["targets"]) if data["targets"] else "(none)"
+    reply_to = data["message"].get("parent_id") or args.message_id
     print(
         f"sent {safe_field(data['message']['id'])} in reply to "
-        f"{safe_field(args.message_id)} to {targets}"
+        f"{safe_field(reply_to)} to {targets}"
     )
     if data.get("delivered_now"):
         delivered = ", ".join(safe_field(target) for target in data["delivered_now"])

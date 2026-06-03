@@ -95,6 +95,16 @@ class DbTest(unittest.TestCase):
         self.assertEqual(found.id, message["id"])
         self.assertEqual(self.store.delivery_status(message["id"], "codex", "dev"), "pending")
 
+    def test_matching_message_ids_supports_agent_scoped_prefixes(self) -> None:
+        message, _ = self.store.create_message("dev", "claude", "hello", ["codex"])
+        self.store.create_message("dev", "claude", "other", ["copilot"])
+
+        self.assertEqual(
+            self.store.matching_message_ids("dev", message["id"][:-2], agent_id="codex"),
+            [message["id"]],
+        )
+        self.assertEqual(self.store.matching_message_ids("dev", "msg_", agent_id="codex"), [message["id"]])
+
     def test_thread_returns_root_and_descendants(self) -> None:
         root, _ = self.store.create_message("dev", "claude", "root", ["codex"])
         reply, _ = self.store.create_message(

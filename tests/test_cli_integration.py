@@ -229,6 +229,57 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual([message["id"] for message in messages], [root_id, reply_id])
         self.assertEqual(messages[1]["parent_id"], root_id)
 
+    def test_message_id_prefixes_work_for_daily_message_commands(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "Question",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        prefix = message_id[:-2]
+
+        read = self.run_peerpost("read", prefix, "--agent", "codex", "--team", "dev", "--format", "json")
+        self.assertEqual(read.returncode, 0, read.stderr)
+        self.assertEqual(json.loads(read.stdout)["id"], message_id)
+
+        reply = self.run_peerpost("reply", prefix, "--from", "codex", "--team", "dev", "Answer")
+        self.assertEqual(reply.returncode, 0, reply.stderr)
+        self.assertIn(f"in reply to {message_id} to claude", reply.stdout)
+        reply_id = reply.stdout.split()[1]
+
+        thread = self.run_peerpost("thread", reply_id[:-2], "--team", "dev", "--format", "json")
+        self.assertEqual(thread.returncode, 0, thread.stderr)
+        self.assertEqual([message["id"] for message in json.loads(thread.stdout)], [message_id, reply_id])
+
+        ack = self.run_peerpost("ack", prefix, "--agent", "codex", "--team", "dev", "--format", "json")
+        self.assertEqual(ack.returncode, 0, ack.stderr)
+        self.assertEqual(json.loads(ack.stdout)["updated"], 1)
+
+        done = self.run_peerpost("done", prefix, "--agent", "codex", "--team", "dev", "--format", "json")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(json.loads(done.stdout)["updated"], 1)
+
+    def test_ambiguous_message_id_prefix_is_rejected(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        self.run_peerpost("send", "--from", "claude", "--to", "codex", "--team", "dev", "one")
+        self.run_peerpost("send", "--from", "claude", "--to", "codex", "--team", "dev", "two")
+
+        result = self.run_peerpost("read", "msg_", "--agent", "codex", "--team", "dev")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("message id prefix matches multiple messages", result.stderr)
+
     def test_reply_rejects_message_not_delivered_to_agent(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
