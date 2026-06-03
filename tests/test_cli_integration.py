@@ -335,6 +335,35 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("message id prefix matches multiple messages", result.stderr)
 
+    def test_ack_and_done_reject_unresolved_message_ids(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+
+        missing_ack = self.run_peerpost("ack", "msg_missing", "--agent", "codex", "--team", "dev")
+        self.assertEqual(missing_ack.returncode, 1)
+        self.assertIn("message id not found for this agent/team", missing_ack.stderr)
+
+        missing_done = self.run_peerpost("done", "msg_missing", "--agent", "codex", "--team", "dev")
+        self.assertEqual(missing_done.returncode, 1)
+        self.assertIn("message id not found for this agent/team", missing_done.stderr)
+
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "Only codex should mark this.",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = sent.stdout.split()[1]
+
+        wrong_agent = self.run_peerpost("done", message_id, "--agent", "claude", "--team", "dev")
+        self.assertEqual(wrong_agent.returncode, 1)
+        self.assertIn("message id not found for this agent/team", wrong_agent.stderr)
+
     def test_reply_rejects_message_not_delivered_to_agent(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

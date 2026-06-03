@@ -257,7 +257,12 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             agent = self._require(request, "agent")
             return {
                 "updated": store.ack(
-                    self._resolve_message_ids(team, self._require(request, "message_ids"), agent),
+                    self._resolve_message_ids(
+                        team,
+                        self._require(request, "message_ids"),
+                        agent,
+                        require_match=True,
+                    ),
                     agent,
                     team,
                 )
@@ -267,7 +272,12 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             agent = self._require(request, "agent")
             return {
                 "updated": store.done(
-                    self._resolve_message_ids(team, self._require(request, "message_ids"), agent),
+                    self._resolve_message_ids(
+                        team,
+                        self._require(request, "message_ids"),
+                        agent,
+                        require_match=True,
+                    ),
                     agent,
                     team,
                 )
@@ -324,7 +334,12 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
     def _resolve_message_id(
-        self, team: str, message_id_or_prefix: str, agent: str | None = None
+        self,
+        team: str,
+        message_id_or_prefix: str,
+        agent: str | None = None,
+        *,
+        require_match: bool = False,
     ) -> str:
         matches = self.server.store.matching_message_ids(team, message_id_or_prefix, agent)
         if len(matches) > 1:
@@ -332,13 +347,33 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                 "ambiguous_message_id",
                 f"message id prefix matches multiple messages: {message_id_or_prefix}",
             )
+        if not matches and require_match:
+            if agent is None:
+                raise RequestError(
+                    "not_found",
+                    f"message id not found for this team: {message_id_or_prefix}",
+                )
+            raise RequestError(
+                "not_found",
+                f"message id not found for this agent/team: {message_id_or_prefix}",
+            )
         return matches[0] if matches else message_id_or_prefix
 
     def _resolve_message_ids(
-        self, team: str, message_ids_or_prefixes: list[str], agent: str | None = None
+        self,
+        team: str,
+        message_ids_or_prefixes: list[str],
+        agent: str | None = None,
+        *,
+        require_match: bool = False,
     ) -> list[str]:
         return [
-            self._resolve_message_id(team, message_id_or_prefix, agent)
+            self._resolve_message_id(
+                team,
+                message_id_or_prefix,
+                agent,
+                require_match=require_match,
+            )
             for message_id_or_prefix in message_ids_or_prefixes
         ]
 

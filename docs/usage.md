@@ -99,6 +99,7 @@ peerpost done msg_20260604T010203
 ```
 
 If a prefix matches multiple messages, peerpost reports an error and asks for a longer prefix.
+If an `ack` or `done` id does not resolve for the current agent/team, peerpost exits with an error instead of silently updating 0 rows.
 
 ## 5. Check Health
 
