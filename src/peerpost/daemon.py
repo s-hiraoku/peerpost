@@ -312,6 +312,8 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             return data
         if request_type == "delivery_health":
             return store.delivery_health(request.get("team"))
+        if request_type == "team_status":
+            return store.team_status(self._require(request, "team"))
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
     def _send(self, request: dict[str, Any]) -> dict[str, Any]:

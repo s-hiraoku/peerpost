@@ -200,6 +200,28 @@ class DbTest(unittest.TestCase):
         self.assertEqual(health["orphans"][0]["to_agent"], "cdoex")
         self.assertEqual(health["orphans"][0]["pending"], 1)
 
+    def test_team_status_reports_agent_delivery_counts(self) -> None:
+        self.store.join_agent("claude", "claude-code", "dev")
+        self.store.join_agent("codex", "codex", "dev")
+        pending_message, _ = self.store.create_message("dev", "claude", "pending", ["codex"])
+        delivered_message, _ = self.store.create_message("dev", "claude", "delivered", ["codex"])
+        done_message, _ = self.store.create_message("dev", "claude", "done", ["codex"])
+        self.store.mark_delivered([delivered_message["id"]], "codex", "dev")
+        self.store.done([done_message["id"]], "codex", "dev")
+        self.store.create_message("dev", "claude", "typo", ["cdoex"])
+
+        status = self.store.team_status("dev")
+
+        codex = next(agent for agent in status["agents"] if agent["id"] == "codex")
+        self.assertEqual(codex["pending"], 1)
+        self.assertEqual(codex["delivered"], 1)
+        self.assertEqual(codex["done"], 1)
+        self.assertEqual(codex["non_done"], 2)
+        self.assertEqual(status["totals"], {"delivered": 1, "done": 1, "pending": 2})
+        self.assertEqual(status["unregistered"][0]["to_agent"], "cdoex")
+        self.assertEqual(status["unregistered"][0]["pending"], 1)
+        self.assertEqual(self.store.delivery_status(pending_message["id"], "codex", "dev"), "pending")
+
     def test_broadcast_targets_all_agents_except_sender(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")
         self.store.join_agent("codex", "codex", "dev")

@@ -481,6 +481,86 @@ class Store:
         }
 
     @locked_method
+    def team_status(self, team: str) -> dict[str, Any]:
+        agents = self.list_agents(team)
+        status_rows = self.conn.execute(
+            """
+            SELECT to_agent, status, COUNT(*) AS count
+            FROM deliveries
+            WHERE team = ?
+            GROUP BY to_agent, status
+            ORDER BY to_agent, status
+            """,
+            (team,),
+        ).fetchall()
+        counts_by_agent: dict[str, dict[str, int]] = {}
+        totals: dict[str, int] = {}
+        for row in status_rows:
+            agent_counts = counts_by_agent.setdefault(row["to_agent"], {})
+            agent_counts[row["status"]] = row["count"]
+            totals[row["status"]] = totals.get(row["status"], 0) + row["count"]
+
+        last_rows = self.conn.execute(
+            """
+            SELECT d.to_agent, MAX(m.created_at) AS last_message_at
+            FROM deliveries d
+            JOIN messages m ON m.id = d.message_id
+            WHERE d.team = ?
+            GROUP BY d.to_agent
+            """,
+            (team,),
+        ).fetchall()
+        last_by_agent = {row["to_agent"]: row["last_message_at"] for row in last_rows}
+
+        agent_ids = {agent["id"] for agent in agents}
+        agent_reports: list[dict[str, Any]] = []
+        for agent in agents:
+            counts = counts_by_agent.get(agent["id"], {})
+            pending = int(counts.get("pending", 0))
+            delivered = int(counts.get("delivered", 0))
+            acknowledged = int(counts.get("acknowledged", 0))
+            done = int(counts.get("done", 0))
+            agent_reports.append(
+                {
+                    **agent,
+                    "pending": pending,
+                    "delivered": delivered,
+                    "acknowledged": acknowledged,
+                    "done": done,
+                    "non_done": pending + delivered + acknowledged,
+                    "last_message_at": last_by_agent.get(agent["id"]),
+                }
+            )
+
+        unregistered: list[dict[str, Any]] = []
+        for to_agent, counts in sorted(counts_by_agent.items()):
+            if to_agent in agent_ids:
+                continue
+            pending = int(counts.get("pending", 0))
+            delivered = int(counts.get("delivered", 0))
+            acknowledged = int(counts.get("acknowledged", 0))
+            done = int(counts.get("done", 0))
+            unregistered.append(
+                {
+                    "team": team,
+                    "to_agent": to_agent,
+                    "pending": pending,
+                    "delivered": delivered,
+                    "acknowledged": acknowledged,
+                    "done": done,
+                    "non_done": pending + delivered + acknowledged,
+                    "last_message_at": last_by_agent.get(to_agent),
+                }
+            )
+
+        return {
+            "team": team,
+            "agents": agent_reports,
+            "totals": totals,
+            "unregistered": unregistered,
+        }
+
+    @locked_method
     def self_test(self) -> dict[str, Any]:
         team = f"peerpost-self-test-{secrets.token_hex(4)}"
         sender = "peerpost-self-sender"

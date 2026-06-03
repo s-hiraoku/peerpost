@@ -200,6 +200,7 @@ Then check:
 
 ```sh
 peerpost drain --agent codex --team dev
+peerpost status --team dev
 peerpost logs --tail 20
 peerpost doctor
 ```

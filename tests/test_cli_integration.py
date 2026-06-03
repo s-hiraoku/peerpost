@@ -511,6 +511,27 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(left.returncode, 0, left.stderr)
         self.assertTrue(json.loads(left.stdout)["removed"])
 
+    def test_status_reports_agent_delivery_counts(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        self.run_peerpost("send", "--from", "claude", "--to", "codex", "--team", "dev", "pending")
+        self.run_peerpost("send", "--from", "claude", "--to", "cdoex", "--team", "dev", "typo")
+
+        plain = self.run_peerpost("status", "--team", "dev")
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertIn("team: dev", plain.stdout)
+        self.assertIn("codex", plain.stdout)
+        self.assertIn("pending", plain.stdout)
+        self.assertIn("unregistered recipients:", plain.stdout)
+        self.assertIn("cdoex: pending=1", plain.stdout)
+
+        result = self.run_peerpost("status", "--team", "dev", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        codex = next(agent for agent in data["agents"] if agent["id"] == "codex")
+        self.assertEqual(codex["pending"], 1)
+        self.assertEqual(data["unregistered"][0]["to_agent"], "cdoex")
+
     def test_setup_reports_paths_daemon_and_snippets(self) -> None:
         result = self.run_peerpost("setup", "--team", "dev", "--format", "json")
         self.assertEqual(result.returncode, 0, result.stderr)

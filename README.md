@@ -200,6 +200,7 @@ peerpost quickstart
 export PEERPOST_TEAM=dev
 export PEERPOST_AGENT=codex
 peerpost doctor
+peerpost status
 peerpost logs --tail 50
 peerpost send --to claude "message"
 peerpost drain
@@ -212,6 +213,7 @@ Useful but less frequent:
 
 ```sh
 peerpost agents --team dev
+peerpost status --team dev
 peerpost join --agent <id> --type <type> --team dev
 peerpost inbox --agent <agent> --team dev
 peerpost history --team dev --agent <agent>

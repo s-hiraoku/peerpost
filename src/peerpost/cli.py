@@ -235,6 +235,43 @@ def command_agents(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_status(args: argparse.Namespace) -> int:
+    data = client().request("team_status", team=args.team)
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
+
+    print(f"team: {safe_field(data['team'])}")
+    agents = data.get("agents", [])
+    if not agents:
+        print("no agents registered")
+    else:
+        print("agent            type          pending  delivered  acknowledged  done")
+        for agent in agents:
+            print(
+                f"{safe_field(agent['id'])[:16]:16} "
+                f"{safe_field(agent['agent_type'])[:13]:13} "
+                f"{int(agent.get('pending', 0)):7} "
+                f"{int(agent.get('delivered', 0)):10} "
+                f"{int(agent.get('acknowledged', 0)):12} "
+                f"{int(agent.get('done', 0)):4}"
+            )
+
+    unregistered = data.get("unregistered", [])
+    if unregistered:
+        print()
+        print("unregistered recipients:")
+        for item in unregistered:
+            print(
+                f"  {safe_field(item['to_agent'])}: "
+                f"pending={int(item.get('pending', 0))} "
+                f"delivered={int(item.get('delivered', 0))} "
+                f"acknowledged={int(item.get('acknowledged', 0))} "
+                f"done={int(item.get('done', 0))}"
+            )
+    return 0
+
+
 def command_leave(args: argparse.Namespace) -> int:
     data = client().request("leave", agent=args.agent, team=args.team)
     if args.output_format == "json":
@@ -1049,6 +1086,11 @@ def build_parser() -> argparse.ArgumentParser:
     add_team_arg(agents)
     agents.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     agents.set_defaults(func=command_agents)
+
+    status = sub.add_parser("status")
+    add_team_arg(status, required=True)
+    status.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    status.set_defaults(func=command_status)
 
     leave = sub.add_parser("leave")
     add_agent_arg(leave, required=True)
