@@ -218,6 +218,8 @@ class Store:
         message_id = make_message_id()
         created_at = utc_now()
         unique_targets = sorted({target for target in targets if target and target != from_agent})
+        if not unique_targets:
+            raise ValueError("message must have at least one delivery target")
         with self.conn:
             self.conn.execute(
                 """
@@ -535,6 +537,27 @@ class Store:
         ).fetchall()
         unregistered_senders = [row_to_dict(row) for row in sender_rows]
 
+        undeliverable_clauses = ["d.message_id IS NULL"]
+        undeliverable_params: list[Any] = []
+        if team:
+            undeliverable_clauses.append("m.team = ?")
+            undeliverable_params.append(team)
+        undeliverable_rows = self.conn.execute(
+            f"""
+            SELECT m.team, COUNT(*) AS total, MAX(m.created_at) AS last_message_at
+            FROM messages m
+            LEFT JOIN deliveries d ON d.message_id = m.id
+            WHERE {' AND '.join(undeliverable_clauses)}
+            GROUP BY m.team
+            ORDER BY m.team
+            """,
+            tuple(undeliverable_params),
+        ).fetchall()
+        messages_without_deliveries = [row_to_dict(row) for row in undeliverable_rows]
+        messages_without_delivery_count = sum(
+            int(row["total"]) for row in messages_without_deliveries
+        )
+
         priority_clauses = [f"priority NOT IN ({','.join('?' for _ in ALLOWED_PRIORITIES)})"]
         priority_params: list[Any] = sorted(ALLOWED_PRIORITIES)
         if team:
@@ -561,6 +584,8 @@ class Store:
             "orphans": orphans,
             "unregistered_sender_count": len(unregistered_senders),
             "unregistered_senders": unregistered_senders,
+            "messages_without_delivery_count": messages_without_delivery_count,
+            "messages_without_deliveries": messages_without_deliveries,
             "invalid_priority_count": len(invalid_priorities),
             "invalid_priorities": invalid_priorities,
         }

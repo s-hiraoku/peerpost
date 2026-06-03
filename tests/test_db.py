@@ -98,6 +98,12 @@ class DbTest(unittest.TestCase):
                 priority="later",
             )
 
+    def test_send_rejects_empty_delivery_targets(self) -> None:
+        with self.assertRaisesRegex(ValueError, "message must have at least one delivery target"):
+            self.store.create_message("dev", "claude", "self note", ["claude"])
+        with self.assertRaisesRegex(ValueError, "message must have at least one delivery target"):
+            self.store.create_message("dev", "claude", "empty", [])
+
     def test_get_message_for_agent_does_not_mark_delivered(self) -> None:
         message, _ = self.store.create_message("dev", "claude", "hello", ["codex"])
         found = self.store.get_message_for_agent(message["id"], "codex", "dev")
@@ -274,6 +280,30 @@ class DbTest(unittest.TestCase):
         self.assertEqual(health["invalid_status_count"], 1)
         self.assertEqual(health["invalid_statuses"][0]["status"], "lost")
         self.assertEqual(health["invalid_statuses"][0]["total"], 1)
+
+    def test_delivery_health_reports_messages_without_deliveries(self) -> None:
+        self.store.conn.execute(
+            """
+            INSERT INTO messages
+              (id, team, from_agent, body, kind, priority, parent_id, created_at, metadata_json)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, '{}')
+            """,
+            (
+                "msg_20260604T010203456Z_orphan",
+                "dev",
+                "claude",
+                "orphan",
+                "message",
+                "normal",
+                "2026-06-04T01:02:03Z",
+            ),
+        )
+
+        health = self.store.delivery_health("dev")
+
+        self.assertEqual(health["messages_without_delivery_count"], 1)
+        self.assertEqual(health["messages_without_deliveries"][0]["team"], "dev")
+        self.assertEqual(health["messages_without_deliveries"][0]["total"], 1)
 
     def test_team_status_reports_agent_delivery_counts(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")

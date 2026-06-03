@@ -447,6 +447,8 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                 )
         else:
             targets = [self._require_text(request, "to_agent")]
+            if targets[0] == from_agent:
+                raise RequestError("bad_request", "message must have at least one delivery target")
             unregistered_targets = [target for target in targets if store.get_agent(target, team) is None]
         message, targets = store.create_message(
             team,
@@ -476,6 +478,8 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         if parent is None:
             raise RequestError("not_found", "message not found for this agent/team")
         targets = [parent.from_agent]
+        if targets[0] == from_agent:
+            raise RequestError("bad_request", "message must have at least one delivery target")
         unregistered_targets = [target for target in targets if store.get_agent(target, team) is None]
         message, targets = store.create_message(
             team,

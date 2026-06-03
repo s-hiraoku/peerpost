@@ -608,6 +608,40 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(report["delivery_health"]["invalid_status_count"], 1)
         self.assertEqual(report["delivery_health"]["invalid_statuses"][0]["status"], "lost")
 
+    def test_doctor_team_reports_messages_without_deliveries(self) -> None:
+        conn = sqlite3.connect(Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite")
+        try:
+            conn.execute(
+                """
+                INSERT INTO messages
+                  (id, team, from_agent, body, kind, priority, parent_id, created_at, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, ?, '{}')
+                """,
+                (
+                    "msg_20260604T010203456Z_orphan",
+                    "dev",
+                    "claude",
+                    "orphan",
+                    "message",
+                    "normal",
+                    "2026-06-04T01:02:03Z",
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = self.run_peerpost("doctor", "--team", "dev", "--format", "json")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "warnings")
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["deliveries"]["status"], "warn")
+        self.assertIn("1 message(s) without delivery rows", checks["deliveries"]["detail"])
+        self.assertEqual(report["delivery_health"]["messages_without_delivery_count"], 1)
+        self.assertEqual(report["delivery_health"]["messages_without_deliveries"][0]["team"], "dev")
+
     def test_doctor_suggests_daemon_start_when_not_running(self) -> None:
         self._stop_daemon()
         result = self.run_peerpost("doctor")
@@ -874,6 +908,29 @@ class CliIntegrationTest(unittest.TestCase):
 
         self.assertEqual(sent.returncode, 1)
         self.assertIn("no registered broadcast recipients in team dev", sent.stderr)
+        db = sqlite3.connect(Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite")
+        try:
+            count = db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+        finally:
+            db.close()
+        self.assertEqual(count, 0)
+
+    def test_send_rejects_self_delivery_without_storing_message(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "claude",
+            "--team",
+            "dev",
+            "self note",
+        )
+
+        self.assertEqual(sent.returncode, 1)
+        self.assertIn("message must have at least one delivery target", sent.stderr)
         db = sqlite3.connect(Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite")
         try:
             count = db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]

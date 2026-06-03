@@ -58,6 +58,7 @@ peerpost send --broadcast "Standup notes are ready."
 ```
 
 Broadcast fails if no other agent is registered in the team.
+Direct sends to yourself are rejected because they would not create a delivery row.
 
 ## 3. Receive
 
@@ -132,6 +133,7 @@ With `--team`, it also reports whether that team has registered agents.
 It also reports unregistered sender and recipient ids seen in team messages.
 It also reports invalid historical priority values if an old or manually edited database contains them.
 It also reports invalid delivery status values if a database was manually edited or corrupted.
+It also reports messages without delivery rows if an old or manually edited database contains them.
 
 Inspect recent daemon events:
 

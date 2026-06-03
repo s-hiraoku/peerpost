@@ -82,7 +82,7 @@ peerpost doctor
 peerpost doctor --team dev
 ```
 
-`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, unregistered sender or recipient ids, invalid historical priority values, and invalid delivery status values. For scripts:
+`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, unregistered sender or recipient ids, invalid historical priority values, invalid delivery status values, and messages without delivery rows. For scripts:
 
 ```sh
 peerpost doctor --format json
@@ -268,7 +268,7 @@ Broadcast sends to every registered agent in the team except the sender:
 peerpost send --from claude --broadcast --team dev "Standup notes are ready."
 ```
 
-If no other agent is registered in the team, broadcast exits with an error instead of storing an undeliverable empty broadcast.
+If no other agent is registered in the team, broadcast exits with an error instead of storing an undeliverable empty broadcast. Direct sends to yourself are also rejected because they would not create a delivery row.
 
 ## Metadata
 

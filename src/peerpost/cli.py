@@ -848,14 +848,24 @@ def command_doctor(args: argparse.Namespace) -> int:
                 sender_count = int(delivery_health.get("unregistered_sender_count", 0))
                 invalid_priority_count = int(delivery_health.get("invalid_priority_count", 0))
                 invalid_status_count = int(delivery_health.get("invalid_status_count", 0))
+                without_delivery_count = int(
+                    delivery_health.get("messages_without_delivery_count", 0)
+                )
                 detail = (
                     f"team {safe_field(args.team)}: {pending} pending, "
                     f"{orphan_count} unregistered recipient(s), "
                     f"{sender_count} unregistered sender(s), "
                     f"{invalid_priority_count} invalid priority value(s), "
-                    f"{invalid_status_count} invalid delivery status value(s)"
+                    f"{invalid_status_count} invalid delivery status value(s), "
+                    f"{without_delivery_count} message(s) without delivery rows"
                 )
-                if orphan_count or sender_count or invalid_priority_count or invalid_status_count:
+                if (
+                    orphan_count
+                    or sender_count
+                    or invalid_priority_count
+                    or invalid_status_count
+                    or without_delivery_count
+                ):
                     _doctor_check(
                         checks,
                         "deliveries",
