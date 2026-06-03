@@ -61,6 +61,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("peerpost daemon install-autostart", guide)
         self.assertIn("stale autostart files", readme)
         self.assertIn("daemon autostart file", guide)
+        self.assertIn("private file and socket permissions", readme)
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost history", guide)

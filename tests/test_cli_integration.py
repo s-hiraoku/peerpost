@@ -504,6 +504,26 @@ class CliIntegrationTest(unittest.TestCase):
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["socket"]["status"], "info")
 
+    def test_doctor_reports_and_repairs_socket_mode(self) -> None:
+        socket_path = Path(self.env["PEERPOST_SOCKET"])
+        socket_path.chmod(0o666)
+
+        warned = self.run_peerpost("doctor", "--format", "json")
+        self.assertEqual(warned.returncode, 0, warned.stderr)
+        warned_report = json.loads(warned.stdout)
+        warned_checks = {check["name"]: check for check in warned_report["checks"]}
+        self.assertEqual(warned_report["status"], "warnings")
+        self.assertEqual(warned_checks["socket"]["status"], "warn")
+        self.assertIn("expected 0o600", warned_checks["socket"]["detail"])
+
+        fixed = self.run_peerpost("doctor", "--fix", "--format", "json")
+        self.assertEqual(fixed.returncode, 0, fixed.stderr)
+        fixed_report = json.loads(fixed.stdout)
+        fixed_checks = {check["name"]: check for check in fixed_report["checks"]}
+        self.assertEqual(fixed_checks["socket"]["status"], "ok")
+        self.assertIn(f"chmod 600 {socket_path}", fixed_report["repairs"])
+        self.assertEqual(socket_path.stat().st_mode & 0o777, 0o600)
+
     def test_doctor_reports_autostart_health(self) -> None:
         env = {**self.env, "HOME": self.tmp.name}
         if sys.platform == "darwin":

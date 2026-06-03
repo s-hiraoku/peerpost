@@ -801,9 +801,23 @@ def command_doctor(args: argparse.Namespace) -> int:
         else:
             repairs.append(f"removed stale socket {paths.socket}")
 
+    if args.fix and paths.socket.exists() and daemon_running and _mode_int(paths.socket) != 0o600:
+        restrict_file(paths.socket)
+        repairs.append(f"chmod 600 {paths.socket}")
+
     if not socket_reported:
         if paths.socket.exists() and daemon_running:
-            _doctor_check(checks, "socket", "ok", str(paths.socket))
+            socket_mode = _mode_int(paths.socket)
+            if socket_mode == 0o600:
+                _doctor_check(checks, "socket", "ok", f"{paths.socket} mode {_mode(paths.socket)}")
+            else:
+                _doctor_check(
+                    checks,
+                    "socket",
+                    "warn",
+                    f"{paths.socket} mode {_mode(paths.socket)}; expected 0o600",
+                    f"chmod 600 {paths.socket}",
+                )
         elif paths.socket.exists():
             _doctor_check(checks, "socket", "warn", f"{paths.socket} exists but daemon is not responding", f"rm -f {paths.socket}; peerpost daemon start")
         else:
