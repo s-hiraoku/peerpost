@@ -660,7 +660,13 @@ class Store:
 
         last_rows = self.conn.execute(
             """
-            SELECT d.to_agent, MAX(m.created_at) AS last_message_at
+            SELECT
+              d.to_agent,
+              MAX(m.created_at) AS last_message_at,
+              MAX(CASE WHEN d.status = 'pending' THEN m.created_at END) AS last_pending_at,
+              MAX(CASE WHEN d.status = 'delivered' THEN COALESCE(d.delivered_at, m.created_at) END) AS last_delivered_at,
+              MAX(CASE WHEN d.status = 'acknowledged' THEN COALESCE(d.acknowledged_at, d.delivered_at, m.created_at) END) AS last_acknowledged_at,
+              MAX(CASE WHEN d.status = 'done' THEN COALESCE(d.done_at, d.acknowledged_at, d.delivered_at, m.created_at) END) AS last_done_at
             FROM deliveries d
             JOIN messages m ON m.id = d.message_id
             WHERE d.team = ?
@@ -668,7 +674,7 @@ class Store:
             """,
             (team,),
         ).fetchall()
-        last_by_agent = {row["to_agent"]: row["last_message_at"] for row in last_rows}
+        last_by_agent = {row["to_agent"]: row_to_dict(row) for row in last_rows}
 
         agent_ids = {agent["id"] for agent in agents}
         agent_reports: list[dict[str, Any]] = []
@@ -686,7 +692,11 @@ class Store:
                     "acknowledged": acknowledged,
                     "done": done,
                     "non_done": pending + delivered + acknowledged,
-                    "last_message_at": last_by_agent.get(agent["id"]),
+                    "last_message_at": last_by_agent.get(agent["id"], {}).get("last_message_at"),
+                    "last_pending_at": last_by_agent.get(agent["id"], {}).get("last_pending_at"),
+                    "last_delivered_at": last_by_agent.get(agent["id"], {}).get("last_delivered_at"),
+                    "last_acknowledged_at": last_by_agent.get(agent["id"], {}).get("last_acknowledged_at"),
+                    "last_done_at": last_by_agent.get(agent["id"], {}).get("last_done_at"),
                 }
             )
 
@@ -707,7 +717,11 @@ class Store:
                     "acknowledged": acknowledged,
                     "done": done,
                     "non_done": pending + delivered + acknowledged,
-                    "last_message_at": last_by_agent.get(to_agent),
+                    "last_message_at": last_by_agent.get(to_agent, {}).get("last_message_at"),
+                    "last_pending_at": last_by_agent.get(to_agent, {}).get("last_pending_at"),
+                    "last_delivered_at": last_by_agent.get(to_agent, {}).get("last_delivered_at"),
+                    "last_acknowledged_at": last_by_agent.get(to_agent, {}).get("last_acknowledged_at"),
+                    "last_done_at": last_by_agent.get(to_agent, {}).get("last_done_at"),
                 }
             )
 

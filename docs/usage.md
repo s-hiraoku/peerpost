@@ -122,6 +122,8 @@ Check delivery counts:
 peerpost status
 ```
 
+`status` shows delivery counts and each agent's most recent pending message time.
+
 Check daemon, paths, permissions, and delivery health:
 
 ```sh

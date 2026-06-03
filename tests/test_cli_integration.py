@@ -1155,15 +1155,19 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("team: dev", plain.stdout)
         self.assertIn("codex", plain.stdout)
         self.assertIn("pending", plain.stdout)
+        self.assertIn("last pending", plain.stdout)
         self.assertIn("unregistered recipients:", plain.stdout)
         self.assertIn("cdoex: pending=1", plain.stdout)
+        self.assertIn("last_pending=", plain.stdout)
 
         result = self.run_peerpost("status", "--team", "dev", "--format", "json")
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
         codex = next(agent for agent in data["agents"] if agent["id"] == "codex")
         self.assertEqual(codex["pending"], 1)
+        self.assertIsNotNone(codex["last_pending_at"])
         self.assertEqual(data["unregistered"][0]["to_agent"], "cdoex")
+        self.assertIsNotNone(data["unregistered"][0]["last_pending_at"])
 
     def test_inbox_plain_output_shows_delivered_status(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")

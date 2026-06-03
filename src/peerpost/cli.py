@@ -302,7 +302,7 @@ def command_status(args: argparse.Namespace) -> int:
     if not agents:
         print("no agents registered")
     else:
-        print("agent            type          pending  delivered  acknowledged  done")
+        print("agent            type          pending  delivered  acknowledged  done  last pending")
         for agent in agents:
             print(
                 f"{safe_field(agent['id'])[:16]:16} "
@@ -310,7 +310,8 @@ def command_status(args: argparse.Namespace) -> int:
                 f"{int(agent.get('pending', 0)):7} "
                 f"{int(agent.get('delivered', 0)):10} "
                 f"{int(agent.get('acknowledged', 0)):12} "
-                f"{int(agent.get('done', 0)):4}"
+                f"{int(agent.get('done', 0)):4}  "
+                f"{safe_field(agent.get('last_pending_at') or '-')}"
             )
 
     unregistered = data.get("unregistered", [])
@@ -323,7 +324,8 @@ def command_status(args: argparse.Namespace) -> int:
                 f"pending={int(item.get('pending', 0))} "
                 f"delivered={int(item.get('delivered', 0))} "
                 f"acknowledged={int(item.get('acknowledged', 0))} "
-                f"done={int(item.get('done', 0))}"
+                f"done={int(item.get('done', 0))} "
+                f"last_pending={safe_field(item.get('last_pending_at') or '-')}"
             )
     return 0
 

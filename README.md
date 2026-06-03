@@ -259,6 +259,7 @@ peerpost logs --tail 50
 ```
 
 Most automation-facing commands support `--format json`.
+`peerpost status` shows delivery counts and the most recent pending message time per agent.
 
 ## Broadcast
 

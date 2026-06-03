@@ -369,9 +369,13 @@ class DbTest(unittest.TestCase):
         self.assertEqual(codex["delivered"], 1)
         self.assertEqual(codex["done"], 1)
         self.assertEqual(codex["non_done"], 2)
+        self.assertEqual(codex["last_pending_at"], pending_message["created_at"])
+        self.assertIsNotNone(codex["last_delivered_at"])
+        self.assertIsNotNone(codex["last_done_at"])
         self.assertEqual(status["totals"], {"delivered": 1, "done": 1, "pending": 2})
         self.assertEqual(status["unregistered"][0]["to_agent"], "cdoex")
         self.assertEqual(status["unregistered"][0]["pending"], 1)
+        self.assertIsNotNone(status["unregistered"][0]["last_pending_at"])
         self.assertEqual(self.store.delivery_status(pending_message["id"], "codex", "dev"), "pending")
 
     def test_broadcast_targets_all_agents_except_sender(self) -> None:

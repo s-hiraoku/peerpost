@@ -100,6 +100,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost history", guide)
         self.assertIn("peerpost status", guide)
+        self.assertIn("most recent pending message time", readme)
+        self.assertIn("most recent pending message time", guide)
         self.assertIn("--stdin", guide)
         self.assertIn("plain output includes a `msg_...` id", guide)
         self.assertIn("unique message id prefix", guide)
