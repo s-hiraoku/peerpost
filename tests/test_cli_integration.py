@@ -1097,6 +1097,19 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertFalse(apply_payload["dry_run"])
         self.assertEqual(apply_payload["deleted"], 1)
 
+    def test_prune_rejects_unsafe_cutoffs_and_limits(self) -> None:
+        cases = [
+            (("--older-than-days", "0"), "--older-than-days must be 1 or greater"),
+            (("--limit", "0"), "--limit must be 1 or greater"),
+            (("--before", "not-a-time"), "--before must be a valid UTC ISO timestamp"),
+            (("--before", "2999-01-01T00:00:00Z"), "--before must be in the past"),
+        ]
+        for extra_args, error in cases:
+            with self.subTest(extra_args=extra_args):
+                result = self.run_peerpost("prune", *extra_args)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(error, result.stderr)
+
     def test_backup_creates_readable_sqlite_snapshot(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

@@ -300,6 +300,8 @@ To see old completed messages that can be removed:
 peerpost prune --team dev --older-than-days 30
 ```
 
+`prune` rejects zero or negative ages, future cutoffs, and non-positive limits.
+
 To actually delete matched completed messages:
 
 ```sh

@@ -496,14 +496,29 @@ def command_thread(args: argparse.Namespace) -> int:
     return 0
 
 
+def prune_cutoff(args: argparse.Namespace) -> str:
+    now = datetime.now(UTC).replace(microsecond=0)
+    if args.limit < 1:
+        raise ValueError("--limit must be 1 or greater")
+    if args.before:
+        try:
+            cutoff = datetime.fromisoformat(args.before.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("--before must be a valid UTC ISO timestamp") from exc
+        if cutoff.tzinfo is None:
+            raise ValueError("--before must include a timezone, for example 2026-06-01T00:00:00Z")
+        cutoff = cutoff.astimezone(UTC).replace(microsecond=0)
+    else:
+        if args.older_than_days < 1:
+            raise ValueError("--older-than-days must be 1 or greater")
+        cutoff = now - timedelta(days=args.older_than_days)
+    if cutoff >= now:
+        raise ValueError("--before must be in the past")
+    return cutoff.isoformat().replace("+00:00", "Z")
+
+
 def command_prune(args: argparse.Namespace) -> int:
-    before = (
-        args.before
-        or (datetime.now(UTC) - timedelta(days=args.older_than_days))
-        .replace(microsecond=0)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    before = prune_cutoff(args)
     data = client().request(
         "prune",
         team=args.team,

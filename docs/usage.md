@@ -184,3 +184,5 @@ Apply the deletion:
 ```sh
 peerpost prune --older-than-days 30 --apply
 ```
+
+`prune` requires a positive age or past `--before` timestamp and a positive `--limit`.
