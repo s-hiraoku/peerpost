@@ -26,7 +26,7 @@ Use an isolated state directory:
 export PEERPOST_HOME="$(mktemp -d)"
 export PEERPOST_SOCKET="/tmp/peerpost-release-$USER.sock"
 
-peerpost setup --start-daemon --team dev --register-default-agents
+peerpost quickstart --team dev
 peerpost doctor --self-test
 peerpost send --from claude --to codex --team dev "release smoke test"
 peerpost drain --agent codex --team dev

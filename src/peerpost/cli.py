@@ -33,6 +33,7 @@ DEFAULT_SETUP_AGENTS = (
     ("codex", "codex"),
     ("copilot", "copilot"),
 )
+QUICKSTART_ADAPTERS = ("claude-code", "codex", "copilot")
 AGENT_TYPE_ALIASES = {
     "claude": "claude-code",
     "claude-code": "claude-code",
@@ -692,33 +693,35 @@ def command_doctor(args: argparse.Namespace) -> int:
 
 
 def snippet_for(adapter: str, agent: str, team: str) -> str:
+    agent_arg = shlex.quote(safe_field(agent))
+    team_arg = shlex.quote(safe_field(team))
     if adapter == "claude-code":
         return (
             "# Claude Code Monitor\n"
-            f"peerpost subscribe --agent {agent} --team {team} --include-backlog --format monitor"
+            f"peerpost subscribe --agent {agent_arg} --team {team_arg} --include-backlog --format monitor"
         )
     if adapter == "codex":
         return (
             "# Codex Stop hook command\n"
-            f"peerpost drain --agent {agent} --team {team} --format codex-hook"
+            f"peerpost drain --agent {agent_arg} --team {team_arg} --format codex-hook"
         )
     if adapter == "copilot":
         return (
             "# Copilot agentStop hook command\n"
-            f"peerpost drain --agent {agent} --team {team} --format copilot-hook"
+            f"peerpost drain --agent {agent_arg} --team {team_arg} --format copilot-hook"
         )
     if adapter == "antigravity":
         return (
             "# Antigravity/local generic receive command\n"
-            f"peerpost drain --agent {agent} --team {team} --format plain\n"
+            f"peerpost drain --agent {agent_arg} --team {team_arg} --format plain\n"
             f"# Or keep a live local monitor open:\n"
-            f"peerpost subscribe --agent {agent} --team {team} --format monitor"
+            f"peerpost subscribe --agent {agent_arg} --team {team_arg} --format monitor"
         )
     return (
         "# Generic local agent receive command\n"
-        f"peerpost drain --agent {agent} --team {team} --format plain\n"
+        f"peerpost drain --agent {agent_arg} --team {team_arg} --format plain\n"
         f"# Or keep a live local monitor open:\n"
-        f"peerpost subscribe --agent {agent} --team {team} --format monitor"
+        f"peerpost subscribe --agent {agent_arg} --team {team_arg} --format monitor"
     )
 
 
@@ -784,10 +787,24 @@ def command_install_snippets(args: argparse.Namespace) -> int:
         if adapter in DAEMON_SNIPPETS:
             blocks.append(daemon_snippet_for(adapter))
         else:
-            agent = args.agent or ("claude" if adapter == "claude-code" else adapter)
+            agent = agent_id_for_adapter(adapter, args.agent)
             blocks.append(snippet_for(adapter, agent, args.team))
     print("\n\n".join(blocks))
     return 0
+
+
+def agent_id_for_adapter(adapter: str, override: str | None = None) -> str:
+    if override:
+        return override
+    return "claude" if adapter == "claude-code" else adapter
+
+
+def snippet_items(adapters: tuple[str, ...], team: str, agent_override: str | None = None) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for adapter in adapters:
+        agent = agent_id_for_adapter(adapter, agent_override)
+        items.append({"adapter": adapter, "agent": agent, "snippet": snippet_for(adapter, agent, team)})
+    return items
 
 
 def _setup_registration_specs(args: argparse.Namespace) -> list[tuple[str, str]]:
@@ -808,6 +825,81 @@ def _setup_registration_specs(args: argparse.Namespace) -> list[tuple[str, str]]
     for agent, agent_type in specs:
         deduped[agent] = agent_type
     return sorted(deduped.items())
+
+
+def command_quickstart(args: argparse.Namespace) -> int:
+    paths = ensure_home(get_paths())
+    daemon = start_daemon_background()
+    if daemon is None:
+        eprint("failed to start peerpostd")
+        return 1
+
+    registered_agents: list[dict[str, Any]] = []
+    for agent, agent_type in DEFAULT_SETUP_AGENTS:
+        registered_agents.append(
+            client().request(
+                "join",
+                agent=agent,
+                agent_type=agent_type,
+                team=args.team,
+                workspace=None,
+            )
+        )
+
+    try:
+        self_test = client().request("self_test")
+    except PeerpostClientError as exc:
+        self_test = {"ok": False, "error": str(exc)}
+
+    snippets = snippet_items(QUICKSTART_ADAPTERS, args.team)
+    data = {
+        "home": str(paths.home),
+        "db": str(paths.db),
+        "socket": str(paths.socket),
+        "pid": str(paths.pid),
+        "log": str(paths.log),
+        "daemon": daemon,
+        "team": args.team,
+        "registered_agents": registered_agents,
+        "self_test": self_test,
+        "snippets": snippets,
+        "try_commands": [
+            f"peerpost send --from claude --to codex --team {shlex.quote(safe_field(args.team))} "
+            "\"Please review the auth middleware.\"",
+            f"peerpost drain --agent codex --team {shlex.quote(safe_field(args.team))}",
+        ],
+    }
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0 if self_test.get("ok") else 1
+
+    print("peerpost quickstart")
+    print(f"daemon: running pid {safe_field(daemon.get('pid'))}")
+    print(f"team: {safe_field(args.team)}")
+    print(f"home: {paths.home}")
+    print()
+    print("registered agents:")
+    for agent in registered_agents:
+        print(
+            f"  {safe_field(agent['team'])}/{safe_field(agent['id'])} "
+            f"{safe_field(agent['agent_type'])}"
+        )
+    print()
+    print(f"self-test: {'ok' if self_test.get('ok') else 'failed'}")
+    if not self_test.get("ok") and self_test.get("error"):
+        print(f"  {safe_field(self_test['error'])}")
+    print()
+    print("configure receiving:")
+    for item in snippets:
+        print()
+        print(item["snippet"])
+    print()
+    print("try it:")
+    for command in data["try_commands"]:
+        print(f"  {command}")
+    print()
+    print(f"check later: peerpost doctor --team {shlex.quote(safe_field(args.team))} --self-test")
+    return 0 if self_test.get("ok") else 1
 
 
 def command_setup(args: argparse.Namespace) -> int:
@@ -837,10 +929,7 @@ def command_setup(args: argparse.Namespace) -> int:
         )
 
     adapters = SNIPPET_ADAPTERS if args.adapter == "all" else (args.adapter,)
-    snippets = []
-    for adapter in adapters:
-        agent = args.agent or ("claude" if adapter == "claude-code" else adapter)
-        snippets.append({"adapter": adapter, "agent": agent, "snippet": snippet_for(adapter, agent, args.team)})
+    snippets = snippet_items(tuple(adapters), args.team, args.agent)
 
     data = {
         "home": str(paths.home),
@@ -1065,6 +1154,11 @@ def build_parser() -> argparse.ArgumentParser:
     snippets.add_argument("--team", default="dev")
     snippets.add_argument("--agent", help="override the agent id used in the snippet")
     snippets.set_defaults(func=command_install_snippets)
+
+    quickstart = sub.add_parser("quickstart")
+    quickstart.add_argument("--team", default="dev")
+    quickstart.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    quickstart.set_defaults(func=command_quickstart)
 
     setup = sub.add_parser("setup")
     setup.add_argument("--team", default="dev")

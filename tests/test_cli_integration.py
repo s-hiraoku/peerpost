@@ -412,6 +412,20 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("ExecStart=", systemd.stdout)
         self.assertIn("peerpost.daemon --foreground", systemd.stdout)
 
+    def test_install_snippets_shell_quotes_agent_and_team_arguments(self) -> None:
+        result = self.run_peerpost(
+            "install-snippets",
+            "--adapter",
+            "generic",
+            "--agent",
+            "code reviewer",
+            "--team",
+            "dev team",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--agent 'code reviewer'", result.stdout)
+        self.assertIn("--team 'dev team'", result.stdout)
+
     def test_leave_unregisters_agent_and_excludes_from_broadcast(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
@@ -505,6 +519,34 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(data["home"], self.env["PEERPOST_HOME"])
         self.assertIn("pid", data["daemon"])
         self.assertTrue(any(item["adapter"] == "codex" for item in data["snippets"]))
+
+    def test_quickstart_registers_defaults_and_prints_minimal_next_steps(self) -> None:
+        result = self.run_peerpost("quickstart", "--team", "dev", "--format", "json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data["team"], "dev")
+        self.assertTrue(data["self_test"]["ok"])
+        self.assertIn("pid", data["daemon"])
+        registered = {(agent["id"], agent["agent_type"]) for agent in data["registered_agents"]}
+        self.assertEqual(
+            registered,
+            {
+                ("claude", "claude-code"),
+                ("codex", "codex"),
+                ("copilot", "copilot"),
+            },
+        )
+        snippets = "\n".join(item["snippet"] for item in data["snippets"])
+        self.assertIn("Claude Code Monitor", snippets)
+        self.assertIn("Codex Stop hook command", snippets)
+        self.assertIn("Copilot agentStop hook command", snippets)
+        self.assertEqual(len(data["try_commands"]), 2)
+
+        plain = self.run_peerpost("quickstart", "--team", "dev")
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertIn("peerpost quickstart", plain.stdout)
+        self.assertIn("configure receiving:", plain.stdout)
+        self.assertIn("peerpost send --from claude --to codex --team dev", plain.stdout)
 
     def test_setup_can_include_daemon_autostart_snippet(self) -> None:
         result = self.run_peerpost(

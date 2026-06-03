@@ -29,13 +29,19 @@ peerpost has no runtime dependencies outside the Python standard library.
 
 ## Fast Setup On This PC
 
-Run setup once:
+Run quickstart once:
 
 ```sh
-peerpost setup --start-daemon --team dev --register-default-agents
+peerpost quickstart
 ```
 
-This creates the local state directory, starts `peerpostd` if needed, registers `claude`, `codex`, and `copilot`, prints the active paths, and shows copy/paste snippets for supported CLI agents. It does not edit Claude, Codex, Copilot, or Antigravity config files.
+This creates the local state directory, starts `peerpostd` if needed, registers `claude`, `codex`, and `copilot`, runs a self-test, prints the active paths, and shows the minimum receive commands for Claude Code, Codex CLI, and Copilot CLI. It does not edit Claude, Codex, Copilot, or Antigravity config files.
+
+Use a custom team name if needed:
+
+```sh
+peerpost quickstart --team dev
+```
 
 To register a specific local agent during setup:
 
@@ -181,7 +187,7 @@ Unknown agent types are allowed with a warning.
 These are the main commands needed for day-to-day use:
 
 ```sh
-peerpost setup --start-daemon --team dev --register-default-agents
+peerpost quickstart
 peerpost doctor
 peerpost logs --tail 50
 peerpost send --from <agent> --to <agent> --team dev "message"

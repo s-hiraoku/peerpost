@@ -9,9 +9,11 @@ peerpost does not edit agent config files automatically. Copy the snippet for th
 Run once on the machine:
 
 ```sh
-peerpost setup --start-daemon --team dev --register-default-agents
+peerpost quickstart
 peerpost doctor
 ```
+
+`quickstart` starts the daemon if needed, registers `claude`, `codex`, and `copilot`, runs a self-test, and prints the minimum receive commands for those agents.
 
 If `doctor` reports local permission or stale socket issues, run:
 
