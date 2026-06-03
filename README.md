@@ -95,7 +95,7 @@ To repair safe local filesystem issues such as permissions and stale socket file
 peerpost doctor --fix
 ```
 
-This can restore private database, SQLite sidecar, log, pid, and socket permissions and remove stale socket files when the daemon is not running.
+This can restore private database, SQLite sidecar, log, pid, and socket permissions and remove stale socket files when the daemon is not running. `doctor` also runs SQLite `quick_check` and reports database corruption separately from permission issues.
 
 To verify daemon, SQLite storage, and pending-to-delivered message flow without leaving test messages behind:
 

@@ -452,6 +452,8 @@ class CliIntegrationTest(unittest.TestCase):
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["daemon"]["status"], "ok")
         self.assertEqual(checks["version"]["status"], "ok")
+        self.assertEqual(checks["database"]["status"], "ok")
+        self.assertIn("quick_check ok", checks["database"]["detail"])
         self.assertEqual(checks["socket"]["status"], "ok")
         self.assertEqual(checks["autostart"]["status"], "info")
         self.assertIn("log", checks)
@@ -713,6 +715,7 @@ class CliIntegrationTest(unittest.TestCase):
             self.assertEqual(sidecar.stat().st_mode & 0o777, 0o600)
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["database"]["status"], "ok")
+        self.assertIn("quick_check ok", checks["database"]["detail"])
 
     def test_doctor_fix_removes_stale_socket(self) -> None:
         self._stop_daemon()

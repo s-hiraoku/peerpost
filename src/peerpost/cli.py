@@ -704,11 +704,16 @@ def command_doctor(args: argparse.Namespace) -> int:
                 version = conn.execute(
                     "SELECT value FROM meta WHERE key = 'schema_version'"
                 ).fetchone()
+                quick_check = [
+                    row[0] for row in conn.execute("PRAGMA quick_check").fetchall()
+                ]
             finally:
                 conn.close()
             detail = f"{paths.db} mode {_mode(paths.db)}"
             if version:
                 detail += f" schema_version {version[0]}"
+            if quick_check == ["ok"]:
+                detail += " quick_check ok"
             db_mode = _mode_int(paths.db)
             sidecar_modes = {
                 sidecar: _mode_int(sidecar)
@@ -720,7 +725,16 @@ def command_doctor(args: argparse.Namespace) -> int:
                 for sidecar, mode in sidecar_modes.items()
                 if mode not in (None, 0o600)
             ]
-            if version and version[0] != "1":
+            if quick_check != ["ok"]:
+                _doctor_check(
+                    checks,
+                    "database",
+                    "error",
+                    f"{detail}; quick_check failed: "
+                    f"{'; '.join(str(item) for item in quick_check)}",
+                    "restore from a recent peerpost backup",
+                )
+            elif version and version[0] != "1":
                 _doctor_check(checks, "database", "error", detail, "unsupported schema; backup the database before migrating")
             elif db_mode not in (None, 0o600):
                 _doctor_check(checks, "database", "warn", f"{detail}; expected mode 0o600", f"chmod 600 {paths.db}")

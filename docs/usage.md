@@ -129,6 +129,7 @@ peerpost doctor --self-test
 ```
 
 `doctor` also reports whether the daemon autostart file is missing, current, or stale.
+It runs SQLite `quick_check` and reports database corruption separately from permission issues.
 With `--team`, it also reports whether that team has registered agents.
 It also reports unregistered sender and recipient ids seen in team messages.
 It also reports invalid historical priority values if an old or manually edited database contains them.

@@ -74,6 +74,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("messages without delivery rows", guide)
         self.assertIn("invalid metadata JSON", guide)
         self.assertIn("SQLite sidecar", readme)
+        self.assertIn("SQLite `quick_check`", readme)
+        self.assertIn("SQLite `quick_check`", guide)
         self.assertIn("private database", readme)
         self.assertIn("undeliverable empty broadcast", readme)
         self.assertIn("Broadcast fails if no other agent is registered", guide)
