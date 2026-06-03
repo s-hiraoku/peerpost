@@ -186,7 +186,7 @@ Create a SQLite backup:
 peerpost backup
 ```
 
-`backup` verifies the snapshot with SQLite `quick_check` and `foreign_key_check` before reporting success.
+`backup` verifies the snapshot with SQLite `quick_check` and `foreign_key_check` before reporting success. If verification fails, it exits nonzero.
 
 Preview deletion of old fully done messages:
 

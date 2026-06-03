@@ -576,9 +576,12 @@ def command_backup(args: argparse.Namespace) -> int:
     data = client().request("backup", output=str(output), overwrite=args.overwrite)
     if args.output_format == "json":
         print(format_json(data))
-        return 0
+        return 0 if data.get("verified") else 1
     status = "verified" if data.get("verified") else "unverified"
     print(f"backup: {data['path']} ({data['bytes']} bytes, integrity {status})")
+    if not data.get("verified"):
+        eprint("backup integrity check failed; do not use this backup for restore")
+        return 1
     return 0
 
 

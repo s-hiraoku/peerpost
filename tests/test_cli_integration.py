@@ -1551,6 +1551,36 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(plain.returncode, 0, plain.stderr)
         self.assertIn("integrity verified", plain.stdout)
 
+    def test_backup_returns_nonzero_when_verification_fails(self) -> None:
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute(
+                "INSERT INTO deliveries (message_id, team, to_agent, status) "
+                "VALUES (?, ?, ?, ?)",
+                ("msg_missing_fk", "dev", "codex", "pending"),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        backup_path = Path(self.tmp.name) / "bad-backup.sqlite"
+
+        result = self.run_peerpost(
+            "backup",
+            "--output",
+            str(backup_path),
+            "--format",
+            "json",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload["verified"])
+        self.assertEqual(payload["quick_check"], ["ok"])
+        self.assertEqual(payload["foreign_key_check"][0][0], "deliveries")
+        self.assertTrue(backup_path.exists())
+
     def test_daemon_rejects_oversized_message_body(self) -> None:
         peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])
         with self.assertRaisesRegex(PeerpostClientError, f"body exceeds {MAX_BODY_CHARS}"):

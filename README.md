@@ -301,7 +301,7 @@ peerpost backup --output ~/peerpost-backup.sqlite
 
 Existing backup files are not overwritten unless you pass `--overwrite`.
 Backups are written to a temporary file first and moved into place only after SQLite finishes the backup.
-After writing the snapshot, `backup` runs SQLite `quick_check` and `foreign_key_check` on the backup file and reports whether it was verified.
+After writing the snapshot, `backup` runs SQLite `quick_check` and `foreign_key_check` on the backup file and reports whether it was verified. If verification fails, the command exits nonzero.
 
 To see old completed messages that can be removed:
 
