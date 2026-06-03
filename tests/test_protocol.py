@@ -74,6 +74,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("agent-list, and plain log output strips ANSI", readme)
         self.assertIn("future cutoffs", readme)
         self.assertIn("temporary file first", readme)
+        self.assertIn("Malformed field types return `bad_request`", readme)
         self.assertIn("logs --tail` must be zero or greater", guide)
         self.assertIn("drain --limit` and `prune --limit` must be positive", guide)
         self.assertIn("positive age or past `--before` timestamp", guide)

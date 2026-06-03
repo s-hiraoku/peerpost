@@ -360,7 +360,7 @@ peerpost stores and transports text only. It never evaluates, interpolates, shel
 
 Hook, monitor, plain message, agent-list, and plain log output strips ANSI and other terminal control characters. Message bodies preserve ordinary newlines and tabs with indentation; metadata fields such as agent and team ids are rendered as single-line fields.
 
-Daemon requests are newline-delimited JSON and are capped at 1 MiB per request line. Message bodies are capped at 200,000 characters.
+Daemon requests are newline-delimited JSON and are capped at 1 MiB per request line. Message bodies are capped at 200,000 characters. Malformed field types return `bad_request`; JSON booleans must be real booleans, not strings such as `"false"`.
 
 Hook reasons always begin with:
 

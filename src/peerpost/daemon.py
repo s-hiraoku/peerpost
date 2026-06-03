@@ -199,10 +199,44 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             raise RequestError("bad_request", f"missing required field: {key}")
         return value
 
+    def _require_text(self, request: dict[str, Any], key: str) -> str:
+        value = self._require(request, key)
+        if not isinstance(value, str):
+            raise RequestError("bad_request", f"{key} must be a string")
+        return value
+
+    def _optional_text(self, request: dict[str, Any], key: str) -> str | None:
+        value = request.get(key)
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str):
+            raise RequestError("bad_request", f"{key} must be a string")
+        return value
+
+    def _text_default(self, request: dict[str, Any], key: str, default: str) -> str:
+        value = request.get(key, default)
+        if value in (None, ""):
+            return default
+        if not isinstance(value, str):
+            raise RequestError("bad_request", f"{key} must be a string")
+        return value
+
+    def _require_text_list(self, request: dict[str, Any], key: str) -> list[str]:
+        value = self._require(request, key)
+        if not isinstance(value, list):
+            raise RequestError("bad_request", f"{key} must be a list of strings")
+        if not all(isinstance(item, str) and item for item in value):
+            raise RequestError("bad_request", f"{key} must be a list of non-empty strings")
+        return value
+
+    def _bool(self, request: dict[str, Any], key: str, default: bool = False) -> bool:
+        value = request.get(key, default)
+        if not isinstance(value, bool):
+            raise RequestError("bad_request", f"{key} must be a boolean")
+        return value
+
     def _require_body(self, request: dict[str, Any]) -> str:
-        body = self._require(request, "body")
-        if not isinstance(body, str):
-            raise RequestError("bad_request", "body must be a string")
+        body = self._require_text(request, "body")
         if len(body) > MAX_BODY_CHARS:
             raise RequestError("request_too_large", f"body exceeds {MAX_BODY_CHARS} characters")
         return body
@@ -226,35 +260,35 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             return {"status": "stopping", "pid": os.getpid()}
         if request_type == "join":
             return store.join_agent(
-                self._require(request, "agent"),
-                self._require(request, "agent_type"),
-                self._require(request, "team"),
-                request.get("workspace"),
+                self._require_text(request, "agent"),
+                self._require_text(request, "agent_type"),
+                self._require_text(request, "team"),
+                self._optional_text(request, "workspace"),
             )
         if request_type == "leave":
             removed = store.leave_agent(
-                self._require(request, "agent"),
-                self._require(request, "team"),
+                self._require_text(request, "agent"),
+                self._require_text(request, "team"),
             )
             return {"removed": removed}
         if request_type == "agents":
-            return store.list_agents(request.get("team"))
+            return store.list_agents(self._optional_text(request, "team"))
         if request_type == "send":
             return self._send(request)
         if request_type == "reply":
             return self._reply(request)
         if request_type == "inbox":
             messages = store.inbox(
-                self._require(request, "agent"),
-                self._require(request, "team"),
-                bool(request.get("include_all", False)),
+                self._require_text(request, "agent"),
+                self._require_text(request, "team"),
+                self._bool(request, "include_all"),
             )
             return [message.as_dict() for message in messages]
         if request_type == "read":
-            team = self._require(request, "team")
-            agent = self._require(request, "agent")
+            team = self._require_text(request, "team")
+            agent = self._require_text(request, "agent")
             message = store.read_message(
-                self._resolve_message_id(team, self._require(request, "message_id"), agent),
+                self._resolve_message_id(team, self._require_text(request, "message_id"), agent),
                 agent,
                 team,
             )
@@ -262,13 +296,13 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                 raise RequestError("not_found", "message not found for this agent/team")
             return message.as_dict()
         if request_type == "ack":
-            team = self._require(request, "team")
-            agent = self._require(request, "agent")
+            team = self._require_text(request, "team")
+            agent = self._require_text(request, "agent")
             return {
                 "updated": store.ack(
                     self._resolve_message_ids(
                         team,
-                        self._require(request, "message_ids"),
+                        self._require_text_list(request, "message_ids"),
                         agent,
                         require_match=True,
                     ),
@@ -277,13 +311,13 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                 )
             }
         if request_type == "done":
-            team = self._require(request, "team")
-            agent = self._require(request, "agent")
+            team = self._require_text(request, "team")
+            agent = self._require_text(request, "agent")
             return {
                 "updated": store.done(
                     self._resolve_message_ids(
                         team,
-                        self._require(request, "message_ids"),
+                        self._require_text_list(request, "message_ids"),
                         agent,
                         require_match=True,
                     ),
@@ -293,35 +327,39 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             }
         if request_type == "drain":
             messages = store.drain(
-                self._require(request, "agent"),
-                self._require(request, "team"),
+                self._require_text(request, "agent"),
+                self._require_text(request, "team"),
                 self._positive_int(request, "limit", 20),
             )
             return [message.as_dict() for message in messages]
         if request_type == "history":
-            messages = store.history(request["team"], request.get("agent"), request.get("with_agent"))
+            messages = store.history(
+                self._require_text(request, "team"),
+                self._optional_text(request, "agent"),
+                self._optional_text(request, "with_agent"),
+            )
             return [message.as_dict() for message in messages]
         if request_type == "thread":
-            team = self._require(request, "team")
+            team = self._require_text(request, "team")
             messages = store.thread(
                 team,
-                self._resolve_message_id(team, self._require(request, "message_id"), None),
+                self._resolve_message_id(team, self._require_text(request, "message_id"), None),
             )
             if not messages:
                 raise RequestError("not_found", "message thread not found for this team")
             return [message.as_dict() for message in messages]
         if request_type == "prune":
             return store.prune_done(
-                self._require(request, "before"),
-                request.get("team"),
+                self._require_text(request, "before"),
+                self._optional_text(request, "team"),
                 self._positive_int(request, "limit", 100),
-                bool(request.get("apply", False)),
+                self._bool(request, "apply"),
             )
         if request_type == "backup":
             try:
                 data = store.backup(
-                    Path(self._require(request, "output")),
-                    overwrite=bool(request.get("overwrite", False)),
+                    Path(self._require_text(request, "output")),
+                    overwrite=self._bool(request, "overwrite"),
                 )
             except FileExistsError as exc:
                 raise RequestError(
@@ -337,9 +375,9 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             self.server.logger.info("self-test ok=%s checks=%s", data["ok"], len(data["checks"]))
             return data
         if request_type == "delivery_health":
-            return store.delivery_health(request.get("team"))
+            return store.delivery_health(self._optional_text(request, "team"))
         if request_type == "team_status":
-            return store.team_status(self._require(request, "team"))
+            return store.team_status(self._require_text(request, "team"))
         raise RequestError("unknown_request", f"unknown request type: {request_type}")
 
     def _resolve_message_id(
@@ -388,11 +426,11 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
 
     def _send(self, request: dict[str, Any]) -> dict[str, Any]:
         store = self.server.store
-        team = self._require(request, "team")
-        from_agent = self._require(request, "from_agent")
+        team = self._require_text(request, "team")
+        from_agent = self._require_text(request, "from_agent")
         body = self._require_body(request)
         unregistered_from_agent = store.get_agent(from_agent, team) is None
-        if request.get("broadcast"):
+        if self._bool(request, "broadcast"):
             targets = store.broadcast_targets(team, from_agent)
             unregistered_targets: list[str] = []
             if not targets:
@@ -401,16 +439,16 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
                     f"no registered broadcast recipients in team {team}",
                 )
         else:
-            targets = [self._require(request, "to_agent")]
+            targets = [self._require_text(request, "to_agent")]
             unregistered_targets = [target for target in targets if store.get_agent(target, team) is None]
         message, targets = store.create_message(
             team,
             from_agent,
             body,
             targets,
-            kind=request.get("kind", "message"),
-            priority=request.get("priority", "normal"),
-            parent_id=request.get("parent_id"),
+            kind=self._text_default(request, "kind", "message"),
+            priority=self._text_default(request, "priority", "normal"),
+            parent_id=self._optional_text(request, "parent_id"),
         )
         return self._deliver_to_live_targets(
             message,
@@ -422,9 +460,9 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
 
     def _reply(self, request: dict[str, Any]) -> dict[str, Any]:
         store = self.server.store
-        team = self._require(request, "team")
-        from_agent = self._require(request, "from_agent")
-        parent_id = self._resolve_message_id(team, self._require(request, "message_id"), from_agent)
+        team = self._require_text(request, "team")
+        from_agent = self._require_text(request, "from_agent")
+        parent_id = self._resolve_message_id(team, self._require_text(request, "message_id"), from_agent)
         body = self._require_body(request)
         unregistered_from_agent = store.get_agent(from_agent, team) is None
         parent = store.get_message_for_agent(parent_id, from_agent, team)
@@ -437,8 +475,8 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             from_agent,
             body,
             targets,
-            kind=request.get("kind", "reply"),
-            priority=request.get("priority", "normal"),
+            kind=self._text_default(request, "kind", "reply"),
+            priority=self._text_default(request, "priority", "normal"),
             parent_id=parent_id,
         )
         return self._deliver_to_live_targets(
@@ -482,15 +520,16 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
 
     def _handle_subscribe(self, request: dict[str, Any]) -> None:
         request_id = request.get("id")
-        team = self._require(request, "team")
-        agent = self._require(request, "agent")
+        team = self._require_text(request, "team")
+        agent = self._require_text(request, "agent")
+        include_backlog = self._bool(request, "include_backlog")
         self.wfile.write(encode_json_line(ok_response(request_id, {"status": "subscribed"})))
         self.wfile.flush()
         subscriber = Subscriber(team=team, agent=agent, sock=self.request, lock=threading.Lock())
         self.server.register_subscriber(subscriber)
         self.server.logger.info("subscriber connected team=%s agent=%s", team, agent)
         try:
-            if request.get("include_backlog"):
+            if include_backlog:
                 for message in self.server.store.pending_messages(agent, team, 1000):
                     payload = message.as_dict()
                     if subscriber.send(payload):

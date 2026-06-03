@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import select
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import unittest
 from pathlib import Path
 
 from peerpost.client import DaemonNotRunning, PeerpostClient, PeerpostClientError
-from peerpost.protocol import MAX_BODY_CHARS
+from peerpost.protocol import MAX_BODY_CHARS, decode_json_line, encode_json_line
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -1140,6 +1141,60 @@ class CliIntegrationTest(unittest.TestCase):
             peerpost.request("drain", agent="codex", team="dev", limit=-1)
         with self.assertRaisesRegex(PeerpostClientError, "limit must be an integer"):
             peerpost.request("prune", before="9999-01-01T00:00:00Z", limit="many")
+
+    def test_daemon_rejects_malformed_protocol_fields(self) -> None:
+        peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])
+
+        cases = [
+            (
+                {"type": "history"},
+                "missing required field: team",
+            ),
+            (
+                {
+                    "type": "send",
+                    "from_agent": "claude",
+                    "to_agent": "codex",
+                    "team": "dev",
+                    "body": "hello",
+                    "broadcast": "false",
+                },
+                "broadcast must be a boolean",
+            ),
+            (
+                {"type": "ack", "message_ids": "msg_missing", "agent": "codex", "team": "dev"},
+                "message_ids must be a list of strings",
+            ),
+            (
+                {"type": "backup", "output": 123},
+                "output must be a string",
+            ),
+        ]
+        for payload, error in cases:
+            with self.subTest(payload=payload):
+                with self.assertRaisesRegex(PeerpostClientError, error):
+                    request_type = payload["type"]
+                    request_payload = {key: value for key, value in payload.items() if key != "type"}
+                    peerpost.request(request_type, **request_payload)
+
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(self.env["PEERPOST_SOCKET"])
+            file = sock.makefile("rwb")
+            file.write(
+                encode_json_line(
+                    {
+                        "id": "req_subscribe_bad",
+                        "type": "subscribe",
+                        "agent": "codex",
+                        "team": "dev",
+                        "include_backlog": "true",
+                    }
+                )
+            )
+            file.flush()
+            response = decode_json_line(file.readline())
+        self.assertFalse(response["ok"])
+        self.assertIn("include_backlog must be a boolean", response["error"]["message"])
 
     def test_backup_creates_readable_sqlite_snapshot(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
