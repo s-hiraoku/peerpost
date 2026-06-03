@@ -198,17 +198,23 @@ class DbTest(unittest.TestCase):
         self.assertEqual(self.store.conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0], before_messages)
         self.assertEqual(self.store.conn.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0], before_deliveries)
 
-    def test_delivery_health_reports_unregistered_recipients(self) -> None:
+    def test_delivery_health_reports_unregistered_agents(self) -> None:
         self.store.join_agent("codex", "codex", "dev")
         self.store.create_message("dev", "claude", "ok", ["codex"])
         self.store.create_message("dev", "claude", "typo", ["cdoex"])
+        self.store.create_message("dev", "claud", "sender typo", ["codex"])
 
         health = self.store.delivery_health("dev")
 
-        self.assertEqual(health["status_counts"], {"pending": 2})
+        self.assertEqual(health["status_counts"], {"pending": 3})
         self.assertEqual(health["orphan_count"], 1)
         self.assertEqual(health["orphans"][0]["to_agent"], "cdoex")
         self.assertEqual(health["orphans"][0]["pending"], 1)
+        self.assertEqual(health["unregistered_sender_count"], 2)
+        self.assertEqual(
+            [item["from_agent"] for item in health["unregistered_senders"]],
+            ["claud", "claude"],
+        )
 
     def test_team_status_reports_agent_delivery_counts(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")

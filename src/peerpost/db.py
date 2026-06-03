@@ -478,11 +478,35 @@ class Store:
             tuple(orphan_params),
         ).fetchall()
         orphans = [row_to_dict(row) for row in orphan_rows]
+
+        sender_clauses = ["a.id IS NULL"]
+        sender_params: list[Any] = []
+        if team:
+            sender_clauses.append("m.team = ?")
+            sender_params.append(team)
+        sender_rows = self.conn.execute(
+            f"""
+            SELECT
+              m.team,
+              m.from_agent,
+              COUNT(*) AS total,
+              MAX(m.created_at) AS last_message_at
+            FROM messages m
+            LEFT JOIN agents a ON a.team = m.team AND a.id = m.from_agent
+            WHERE {' AND '.join(sender_clauses)}
+            GROUP BY m.team, m.from_agent
+            ORDER BY m.team, m.from_agent
+            """,
+            tuple(sender_params),
+        ).fetchall()
+        unregistered_senders = [row_to_dict(row) for row in sender_rows]
         return {
             "team": team,
             "status_counts": status_counts,
             "orphan_count": len(orphans),
             "orphans": orphans,
+            "unregistered_sender_count": len(unregistered_senders),
+            "unregistered_senders": unregistered_senders,
         }
 
     @locked_method
