@@ -408,6 +408,7 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(checks["daemon"]["status"], "ok")
         self.assertEqual(checks["version"]["status"], "ok")
         self.assertEqual(checks["socket"]["status"], "ok")
+        self.assertEqual(checks["autostart"]["status"], "info")
         self.assertIn("log", checks)
 
     def test_daemon_status_reports_version(self) -> None:
@@ -502,6 +503,41 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertFalse(socket_path.exists())
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["socket"]["status"], "info")
+
+    def test_doctor_reports_autostart_health(self) -> None:
+        env = {**self.env, "HOME": self.tmp.name}
+        if sys.platform == "darwin":
+            autostart_path = Path(self.tmp.name) / "Library" / "LaunchAgents" / "local.peerpost.peerpostd.plist"
+        elif sys.platform.startswith("linux"):
+            autostart_path = Path(self.tmp.name) / ".config" / "systemd" / "user" / "peerpostd.service"
+        else:
+            self.skipTest(f"autostart target detection is not supported on {sys.platform}")
+
+        missing = self.run_peerpost("doctor", "--format", "json", env=env)
+        self.assertEqual(missing.returncode, 0, missing.stderr)
+        missing_checks = {check["name"]: check for check in json.loads(missing.stdout)["checks"]}
+        self.assertEqual(missing_checks["autostart"]["status"], "info")
+        self.assertEqual(missing_checks["autostart"]["fix"], "peerpost daemon install-autostart")
+
+        install = self.run_peerpost("daemon", "install-autostart", env=env)
+        self.assertEqual(install.returncode, 0, install.stderr)
+
+        healthy = self.run_peerpost("doctor", "--format", "json", env=env)
+        self.assertEqual(healthy.returncode, 0, healthy.stderr)
+        healthy_report = json.loads(healthy.stdout)
+        healthy_checks = {check["name"]: check for check in healthy_report["checks"]}
+        self.assertEqual(healthy_report["status"], "ok")
+        self.assertEqual(healthy_checks["autostart"]["status"], "ok")
+        self.assertIn(str(autostart_path), healthy_checks["autostart"]["detail"])
+
+        autostart_path.write_text("stale\n", encoding="utf-8")
+        stale = self.run_peerpost("doctor", "--format", "json", env=env)
+        self.assertEqual(stale.returncode, 0, stale.stderr)
+        stale_report = json.loads(stale.stdout)
+        stale_checks = {check["name"]: check for check in stale_report["checks"]}
+        self.assertEqual(stale_report["status"], "warnings")
+        self.assertEqual(stale_checks["autostart"]["status"], "warn")
+        self.assertEqual(stale_checks["autostart"]["fix"], "peerpost daemon install-autostart --overwrite")
 
     def test_logs_reports_daemon_events_without_message_body(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")

@@ -123,6 +123,8 @@ Check daemon, paths, permissions, and delivery health:
 peerpost doctor --self-test
 ```
 
+`doctor` also reports whether the daemon autostart file is missing, current, or stale.
+
 Inspect recent daemon events:
 
 ```sh

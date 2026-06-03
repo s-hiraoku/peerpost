@@ -596,6 +596,49 @@ def _repair_private_file(path: Path, repairs: list[str]) -> None:
         repairs.append(f"chmod 600 {path}")
 
 
+def _doctor_autostart_check(checks: list[dict[str, Any]]) -> None:
+    try:
+        target = resolve_daemon_autostart_target("auto")
+        path = daemon_autostart_path(target)
+    except ValueError as exc:
+        _doctor_check(checks, "autostart", "info", str(exc))
+        return
+
+    if not path.exists():
+        _doctor_check(
+            checks,
+            "autostart",
+            "info",
+            f"{target} autostart is not installed: {path}",
+            "peerpost daemon install-autostart",
+        )
+        return
+
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        _doctor_check(
+            checks,
+            "autostart",
+            "warn",
+            f"{path} exists but could not be read: {exc}",
+            "check file permissions",
+        )
+        return
+
+    if content == daemon_config_for(target):
+        _doctor_check(checks, "autostart", "ok", f"{target} autostart installed: {path}")
+        return
+
+    _doctor_check(
+        checks,
+        "autostart",
+        "warn",
+        f"{target} autostart exists but does not match current peerpost paths/runtime: {path}",
+        "peerpost daemon install-autostart --overwrite",
+    )
+
+
 def command_doctor(args: argparse.Namespace) -> int:
     raw_paths = get_paths()
     home_mode_before = _mode_int(raw_paths.home) if raw_paths.home.exists() else None
@@ -773,6 +816,7 @@ def command_doctor(args: argparse.Namespace) -> int:
         _doctor_check(checks, "path", "info", "peerpost command was not found on PATH", "python -m pip install -e .")
 
     _doctor_check(checks, "log", "info", str(paths.log))
+    _doctor_autostart_check(checks)
 
     has_errors = any(check["status"] == "error" for check in checks)
     has_warnings = any(check["status"] == "warn" for check in checks)
