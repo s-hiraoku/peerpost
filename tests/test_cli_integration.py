@@ -546,7 +546,14 @@ class CliIntegrationTest(unittest.TestCase):
 
     def test_doctor_fix_repairs_database_mode(self) -> None:
         db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        sidecars = [
+            db_path.with_name(f"{db_path.name}-wal"),
+            db_path.with_name(f"{db_path.name}-shm"),
+        ]
         db_path.chmod(0o644)
+        for sidecar in sidecars:
+            self.assertTrue(sidecar.exists(), sidecar)
+            sidecar.chmod(0o644)
 
         result = self.run_peerpost("doctor", "--fix", "--format", "json")
 
@@ -554,6 +561,9 @@ class CliIntegrationTest(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertIn(f"chmod 600 {db_path}", report["repairs"])
         self.assertEqual(db_path.stat().st_mode & 0o777, 0o600)
+        for sidecar in sidecars:
+            self.assertIn(f"chmod 600 {sidecar}", report["repairs"])
+            self.assertEqual(sidecar.stat().st_mode & 0o777, 0o600)
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["database"]["status"], "ok")
 

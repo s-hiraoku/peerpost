@@ -59,3 +59,17 @@ def restrict_file(path: Path) -> None:
         path.chmod(0o600)
     except OSError:
         pass
+
+
+def sqlite_sidecar_paths(db_path: Path) -> tuple[Path, Path]:
+    return (
+        db_path.with_name(f"{db_path.name}-wal"),
+        db_path.with_name(f"{db_path.name}-shm"),
+    )
+
+
+def restrict_sqlite_files(db_path: Path) -> None:
+    restrict_file(db_path)
+    for sidecar in sqlite_sidecar_paths(db_path):
+        if sidecar.exists():
+            restrict_file(sidecar)

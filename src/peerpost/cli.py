@@ -20,7 +20,7 @@ from typing import Any
 from . import __version__
 from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
 from .formatters import format_drain, format_json, format_monitor, format_plain
-from .paths import ensure_home, get_paths, restrict_file
+from .paths import ensure_home, get_paths, restrict_file, sqlite_sidecar_paths
 from .security import safe_field, strip_control_chars
 
 
@@ -660,6 +660,8 @@ def command_doctor(args: argparse.Namespace) -> int:
         repairs.append(f"chmod 700 {paths.home}")
     if args.fix:
         _repair_private_file(paths.db, repairs)
+        for sidecar in sqlite_sidecar_paths(paths.db):
+            _repair_private_file(sidecar, repairs)
         _repair_private_file(paths.pid, repairs)
         _repair_private_file(paths.log, repairs)
 
@@ -689,10 +691,29 @@ def command_doctor(args: argparse.Namespace) -> int:
             if version:
                 detail += f" schema_version {version[0]}"
             db_mode = _mode_int(paths.db)
+            sidecar_modes = {
+                sidecar: _mode_int(sidecar)
+                for sidecar in sqlite_sidecar_paths(paths.db)
+                if sidecar.exists()
+            }
+            bad_sidecars = [
+                (sidecar, mode)
+                for sidecar, mode in sidecar_modes.items()
+                if mode not in (None, 0o600)
+            ]
             if version and version[0] != "1":
                 _doctor_check(checks, "database", "error", detail, "unsupported schema; backup the database before migrating")
             elif db_mode not in (None, 0o600):
                 _doctor_check(checks, "database", "warn", f"{detail}; expected mode 0o600", f"chmod 600 {paths.db}")
+            elif bad_sidecars:
+                sidecar_detail = ", ".join(f"{sidecar} mode {oct(mode or 0)}" for sidecar, mode in bad_sidecars)
+                _doctor_check(
+                    checks,
+                    "database",
+                    "warn",
+                    f"{detail}; SQLite sidecar mode should be 0o600: {sidecar_detail}",
+                    "chmod 600 " + " ".join(str(sidecar) for sidecar, _mode_value in bad_sidecars),
+                )
             else:
                 _doctor_check(checks, "database", "ok", detail)
         except sqlite3.Error as exc:

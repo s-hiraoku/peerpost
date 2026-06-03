@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-from .paths import ensure_home, get_paths, restrict_file
+from .paths import ensure_home, get_paths, restrict_file, restrict_sqlite_files
 
 
 SCHEMA_VERSION = "1"
@@ -84,9 +84,9 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
-    restrict_file(db_path)
+    restrict_sqlite_files(db_path)
     migrate(conn)
-    restrict_file(db_path)
+    restrict_sqlite_files(db_path)
     return conn
 
 
