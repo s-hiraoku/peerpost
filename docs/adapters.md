@@ -55,6 +55,20 @@ peerpost install-snippets --adapter launchd
 peerpost install-snippets --adapter systemd
 ```
 
+Write the daemon autostart file for this PC:
+
+```sh
+peerpost daemon install-autostart
+```
+
+On macOS this writes `~/Library/LaunchAgents/local.peerpost.peerpostd.plist`. On Linux this writes `~/.config/systemd/user/peerpostd.service`. peerpost prints the `launchctl` or `systemctl` command to enable it, but does not run that command automatically.
+
+Remove the generated file with:
+
+```sh
+peerpost daemon uninstall-autostart
+```
+
 ## Claude Code
 
 Use Claude Code Monitor with:

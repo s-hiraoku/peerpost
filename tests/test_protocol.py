@@ -57,6 +57,8 @@ class ProtocolTest(unittest.TestCase):
         guide = (ROOT / "docs" / "usage.md").read_text(encoding="utf-8")
         self.assertIn("[Usage Guide](docs/usage.md)", readme)
         self.assertIn("peerpost quickstart", guide)
+        self.assertIn("peerpost daemon install-autostart", readme)
+        self.assertIn("peerpost daemon install-autostart", guide)
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost history", guide)

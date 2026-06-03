@@ -12,6 +12,14 @@ peerpost quickstart
 
 This starts `peerpostd` if needed, registers `claude`, `codex`, and `copilot` in the `dev` team, runs a self-test, and prints receive snippets.
 
+To start the daemon automatically when this PC logs in:
+
+```sh
+peerpost daemon install-autostart
+```
+
+peerpost writes a launchd user agent on macOS or a systemd user service on Linux, then prints the one OS command needed to enable it.
+
 For a daily shell, set defaults:
 
 ```sh

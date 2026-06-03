@@ -86,10 +86,15 @@ class CliIntegrationTest(unittest.TestCase):
         if self.daemon.stderr:
             self.daemon.stderr.close()
 
-    def run_peerpost(self, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    def run_peerpost(
+        self,
+        *args: str,
+        input_text: str | None = None,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-m", "peerpost.cli", *args],
-            env=self.env,
+            env=env or self.env,
             input=input_text,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -546,6 +551,59 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("Linux systemd user unit", systemd.stdout)
         self.assertIn("ExecStart=", systemd.stdout)
         self.assertIn("peerpost.daemon --foreground", systemd.stdout)
+
+    def test_daemon_install_autostart_writes_and_removes_launchd_file(self) -> None:
+        env = {**self.env, "HOME": self.tmp.name}
+        plist = Path(self.tmp.name) / "Library" / "LaunchAgents" / "local.peerpost.peerpostd.plist"
+
+        install = self.run_peerpost(
+            "daemon",
+            "install-autostart",
+            "--target",
+            "launchd",
+            env=env,
+        )
+        self.assertEqual(install.returncode, 0, install.stderr)
+        self.assertIn(f"installed launchd autostart: {plist}", install.stdout)
+        self.assertIn("enable with: launchctl bootstrap", install.stdout)
+        self.assertTrue(plist.exists())
+        content = plist.read_text(encoding="utf-8")
+        self.assertTrue(content.startswith("<?xml"))
+        self.assertIn("<key>PEERPOST_HOME</key>", content)
+        self.assertIn(self.env["PEERPOST_SOCKET"], content)
+        self.assertNotIn("# Save as:", content)
+
+        duplicate = self.run_peerpost(
+            "daemon",
+            "install-autostart",
+            "--target",
+            "launchd",
+            env=env,
+        )
+        self.assertEqual(duplicate.returncode, 1)
+        self.assertIn("pass --overwrite", duplicate.stderr)
+
+        overwrite = self.run_peerpost(
+            "daemon",
+            "install-autostart",
+            "--target",
+            "launchd",
+            "--overwrite",
+            env=env,
+        )
+        self.assertEqual(overwrite.returncode, 0, overwrite.stderr)
+
+        uninstall = self.run_peerpost(
+            "daemon",
+            "uninstall-autostart",
+            "--target",
+            "launchd",
+            env=env,
+        )
+        self.assertEqual(uninstall.returncode, 0, uninstall.stderr)
+        self.assertIn(f"removed launchd autostart: {plist}", uninstall.stdout)
+        self.assertIn("also run: launchctl bootout gui/$(id -u)/local.peerpost.peerpostd", uninstall.stdout)
+        self.assertFalse(plist.exists())
 
     def test_install_snippets_shell_quotes_agent_and_team_arguments(self) -> None:
         result = self.run_peerpost(

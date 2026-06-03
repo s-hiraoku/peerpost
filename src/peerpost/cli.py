@@ -28,6 +28,7 @@ KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"
 HOOK_FORMATS = {"codex-hook", "copilot-hook"}
 SNIPPET_ADAPTERS = ("claude-code", "codex", "copilot", "antigravity", "generic")
 DAEMON_SNIPPETS = ("launchd", "systemd")
+DAEMON_AUTOSTART_TARGETS = ("auto", "launchd", "systemd")
 DEFAULT_SETUP_AGENTS = (
     ("claude", "claude-code"),
     ("codex", "codex"),
@@ -193,6 +194,40 @@ def command_daemon(args: argparse.Namespace) -> int:
             eprint(NOT_RUNNING)
             return 1
         print(f"peerpostd stopping (pid {data.get('pid')})")
+        return 0
+    if args.daemon_command == "install-autostart":
+        try:
+            target = resolve_daemon_autostart_target(args.target)
+            path = daemon_autostart_path(target)
+        except ValueError as exc:
+            eprint(str(exc))
+            return 2
+        if path.exists() and not args.overwrite:
+            eprint(f"autostart file already exists: {path}; pass --overwrite to replace it")
+            return 1
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(daemon_config_for(target), encoding="utf-8")
+        try:
+            path.chmod(0o644)
+        except OSError:
+            pass
+        print(f"installed {target} autostart: {path}")
+        print(f"enable with: {daemon_autostart_enable_command(target, path)}")
+        print(f"disable with: {daemon_autostart_disable_command(target, path)}")
+        return 0
+    if args.daemon_command == "uninstall-autostart":
+        try:
+            target = resolve_daemon_autostart_target(args.target)
+            path = daemon_autostart_path(target)
+        except ValueError as exc:
+            eprint(str(exc))
+            return 2
+        if path.exists():
+            path.unlink()
+            print(f"removed {target} autostart: {path}")
+        else:
+            print(f"no {target} autostart file found: {path}")
+        print(f"also run: {daemon_autostart_disable_command(target, path)}")
         return 0
     eprint("unknown daemon command")
     return 2
@@ -814,15 +849,48 @@ def snippet_for(adapter: str, agent: str, team: str) -> str:
     )
 
 
-def daemon_snippet_for(target: str) -> str:
+def resolve_daemon_autostart_target(target: str) -> str:
+    if target != "auto":
+        return target
+    if sys.platform == "darwin":
+        return "launchd"
+    if sys.platform.startswith("linux"):
+        return "systemd"
+    raise ValueError(
+        "cannot detect daemon autostart target on this OS; pass --target launchd or --target systemd"
+    )
+
+
+def daemon_autostart_path(target: str) -> Path:
+    if target == "launchd":
+        return Path.home() / "Library" / "LaunchAgents" / "local.peerpost.peerpostd.plist"
+    if target == "systemd":
+        return Path.home() / ".config" / "systemd" / "user" / "peerpostd.service"
+    raise ValueError(f"unknown daemon autostart target: {target}")
+
+
+def daemon_autostart_enable_command(target: str, path: Path) -> str:
+    quoted_path = shlex.quote(str(path))
+    if target == "launchd":
+        return f"launchctl bootstrap gui/$(id -u) {quoted_path}"
+    if target == "systemd":
+        return "systemctl --user enable --now peerpostd.service"
+    raise ValueError(f"unknown daemon autostart target: {target}")
+
+
+def daemon_autostart_disable_command(target: str, path: Path) -> str:
+    if target == "launchd":
+        return "launchctl bootout gui/$(id -u)/local.peerpost.peerpostd"
+    if target == "systemd":
+        return "systemctl --user disable --now peerpostd.service"
+    raise ValueError(f"unknown daemon autostart target: {target}")
+
+
+def daemon_config_for(target: str) -> str:
     paths = ensure_home(get_paths())
     python = str(Path(sys.executable).resolve())
     if target == "launchd":
         return (
-            "# macOS launchd user agent plist\n"
-            "# Save as: ~/Library/LaunchAgents/local.peerpost.peerpostd.plist\n"
-            "# Load with: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.peerpost.peerpostd.plist\n"
-            "# Unload with: launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/local.peerpost.peerpostd.plist\n"
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
             "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
             "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
@@ -846,14 +914,10 @@ def daemon_snippet_for(target: str) -> str:
             f"  <key>StandardOutPath</key><string>{html.escape(str(paths.log))}</string>\n"
             f"  <key>StandardErrorPath</key><string>{html.escape(str(paths.log))}</string>\n"
             "</dict>\n"
-            "</plist>"
+            "</plist>\n"
         )
     if target == "systemd":
         return (
-            "# Linux systemd user unit\n"
-            "# Save as: ~/.config/systemd/user/peerpostd.service\n"
-            "# Enable with: systemctl --user enable --now peerpostd.service\n"
-            "# Stop with: systemctl --user disable --now peerpostd.service\n"
             "[Unit]\n"
             "Description=peerpost local peer-agent message bus\n\n"
             "[Service]\n"
@@ -864,7 +928,27 @@ def daemon_snippet_for(target: str) -> str:
             "Restart=on-failure\n"
             "RestartSec=2\n\n"
             "[Install]\n"
-            "WantedBy=default.target"
+            "WantedBy=default.target\n"
+        )
+    raise ValueError(f"unknown daemon autostart target: {target}")
+
+
+def daemon_snippet_for(target: str) -> str:
+    if target == "launchd":
+        return (
+            "# macOS launchd user agent plist\n"
+            f"# Save as: {daemon_autostart_path(target)}\n"
+            f"# Load with: {daemon_autostart_enable_command(target, daemon_autostart_path(target))}\n"
+            f"# Unload with: {daemon_autostart_disable_command(target, daemon_autostart_path(target))}\n"
+            f"{daemon_config_for(target).rstrip()}"
+        )
+    if target == "systemd":
+        return (
+            "# Linux systemd user unit\n"
+            f"# Save as: {daemon_autostart_path(target)}\n"
+            f"# Enable with: {daemon_autostart_enable_command(target, daemon_autostart_path(target))}\n"
+            f"# Stop with: {daemon_autostart_disable_command(target, daemon_autostart_path(target))}\n"
+            f"{daemon_config_for(target).rstrip()}"
         )
     raise ValueError(f"unknown daemon snippet: {target}")
 
@@ -1085,6 +1169,11 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--foreground", action="store_true")
     daemon_sub.add_parser("status")
     daemon_sub.add_parser("stop")
+    install_autostart = daemon_sub.add_parser("install-autostart")
+    install_autostart.add_argument("--target", choices=DAEMON_AUTOSTART_TARGETS, default="auto")
+    install_autostart.add_argument("--overwrite", action="store_true")
+    uninstall_autostart = daemon_sub.add_parser("uninstall-autostart")
+    uninstall_autostart.add_argument("--target", choices=DAEMON_AUTOSTART_TARGETS, default="auto")
     daemon.set_defaults(func=command_daemon)
 
     join = sub.add_parser("join")

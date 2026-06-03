@@ -67,6 +67,14 @@ peerpost setup --team dev --daemon-snippet launchd
 peerpost setup --team dev --daemon-snippet systemd
 ```
 
+To write a daemon autostart file for this PC:
+
+```sh
+peerpost daemon install-autostart
+```
+
+This writes a launchd user agent on macOS or a systemd user service on Linux, then prints the one OS command needed to enable it. It does not run `launchctl` or `systemctl` for you.
+
 Check the setup:
 
 ```sh
@@ -193,6 +201,13 @@ Daemon autostart snippets:
 ```sh
 peerpost install-snippets --adapter launchd
 peerpost install-snippets --adapter systemd
+```
+
+Write or remove the local daemon autostart file:
+
+```sh
+peerpost daemon install-autostart
+peerpost daemon uninstall-autostart
 ```
 
 For copy/paste setup details by agent, see [Adapter Setup](docs/adapters.md).
