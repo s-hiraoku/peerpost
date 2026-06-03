@@ -1396,12 +1396,134 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertFalse(apply_payload["dry_run"])
         self.assertEqual(apply_payload["deleted"], 1)
 
+    def test_prune_apply_can_backup_first(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "done work",
+        )
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        self.run_peerpost("done", message_id, "--agent", "codex", "--team", "dev")
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                "UPDATE messages SET created_at = ? WHERE id = ?",
+                ("2020-01-01T00:00:00Z", message_id),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        backup_path = Path(self.tmp.name) / "before-prune.sqlite"
+
+        applied = self.run_peerpost(
+            "prune",
+            "--team",
+            "dev",
+            "--before",
+            "2021-01-01T00:00:00Z",
+            "--apply",
+            "--backup-first",
+            "--backup-output",
+            str(backup_path),
+            "--format",
+            "json",
+        )
+
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        payload = json.loads(applied.stdout)
+        self.assertEqual(payload["deleted"], 1)
+        self.assertTrue(payload["backup"]["verified"])
+        self.assertEqual(payload["backup"]["path"], str(backup_path.resolve()))
+        backup = sqlite3.connect(backup_path)
+        live = sqlite3.connect(db_path)
+        try:
+            self.assertIsNotNone(
+                backup.execute("SELECT 1 FROM messages WHERE id = ?", (message_id,)).fetchone()
+            )
+            self.assertIsNone(
+                live.execute("SELECT 1 FROM messages WHERE id = ?", (message_id,)).fetchone()
+            )
+        finally:
+            backup.close()
+            live.close()
+
+    def test_prune_backup_first_stops_on_unverified_backup(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "done work",
+        )
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        self.run_peerpost("done", message_id, "--agent", "codex", "--team", "dev")
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                "UPDATE messages SET created_at = ? WHERE id = ?",
+                ("2020-01-01T00:00:00Z", message_id),
+            )
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute(
+                "INSERT INTO deliveries (message_id, team, to_agent, status) VALUES (?, ?, ?, ?)",
+                ("msg_missing_fk", "dev", "codex", "pending"),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = self.run_peerpost(
+            "prune",
+            "--team",
+            "dev",
+            "--before",
+            "2021-01-01T00:00:00Z",
+            "--apply",
+            "--backup-first",
+            "--backup-output",
+            str(Path(self.tmp.name) / "bad-before-prune.sqlite"),
+            "--format",
+            "json",
+        )
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status"], "backup_failed")
+        self.assertFalse(payload["backup"]["verified"])
+        self.assertIsNone(payload["prune"])
+        check = sqlite3.connect(db_path)
+        try:
+            self.assertIsNotNone(
+                check.execute("SELECT 1 FROM messages WHERE id = ?", (message_id,)).fetchone()
+            )
+        finally:
+            check.close()
+
     def test_prune_rejects_unsafe_cutoffs_and_limits(self) -> None:
         cases = [
             (("--older-than-days", "0"), "--older-than-days must be 1 or greater"),
             (("--limit", "0"), "--limit must be 1 or greater"),
             (("--before", "not-a-time"), "--before must be a valid UTC ISO timestamp"),
             (("--before", "2999-01-01T00:00:00Z"), "--before must be in the past"),
+            (("--backup-first",), "--backup-first requires --apply"),
         ]
         for extra_args, error in cases:
             with self.subTest(extra_args=extra_args):

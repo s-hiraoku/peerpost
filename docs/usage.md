@@ -200,4 +200,6 @@ Apply the deletion:
 peerpost prune --older-than-days 30 --apply
 ```
 
+Use `--backup-first` with `--apply` to create and verify a backup before deleting. If the backup verification fails, `prune` exits nonzero and does not delete messages.
+
 `drain --limit` and `prune --limit` must be positive. `prune` also requires a positive age or past `--before` timestamp.

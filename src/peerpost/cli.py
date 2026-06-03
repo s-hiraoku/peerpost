@@ -544,6 +544,27 @@ def prune_cutoff(args: argparse.Namespace) -> str:
 
 def command_prune(args: argparse.Namespace) -> int:
     before = prune_cutoff(args)
+    backup_data: dict[str, Any] | None = None
+    if args.backup_first:
+        if not args.apply:
+            raise ValueError("--backup-first requires --apply")
+        backup_output = (
+            Path(args.backup_output).expanduser().resolve()
+            if args.backup_output
+            else default_backup_path()
+        )
+        backup_data = client().request(
+            "backup",
+            output=str(backup_output),
+            overwrite=False,
+        )
+        if not backup_data.get("verified"):
+            if args.output_format == "json":
+                print(format_json({"status": "backup_failed", "backup": backup_data, "prune": None}))
+            else:
+                eprint("backup integrity check failed; prune was not applied")
+                print(f"backup: {backup_data['path']} ({backup_data['bytes']} bytes, integrity unverified)")
+            return 1
     data = client().request(
         "prune",
         team=args.team,
@@ -551,9 +572,16 @@ def command_prune(args: argparse.Namespace) -> int:
         limit=args.limit,
         apply=args.apply,
     )
+    if backup_data is not None:
+        data = {**data, "backup": backup_data}
     if args.output_format == "json":
         print(format_json(data))
         return 0
+    if backup_data is not None:
+        print(
+            f"backup: {backup_data['path']} "
+            f"({backup_data['bytes']} bytes, integrity verified)"
+        )
     action = "deleted" if args.apply else "would delete"
     print(
         f"prune: {action} {data['matched'] if not args.apply else data['deleted']} "
@@ -1614,6 +1642,8 @@ def build_parser() -> argparse.ArgumentParser:
     prune.add_argument("--before", help="UTC ISO timestamp cutoff, e.g. 2026-06-01T00:00:00Z")
     prune.add_argument("--limit", type=int, default=100)
     prune.add_argument("--apply", action="store_true", help="delete matched messages")
+    prune.add_argument("--backup-first", action="store_true", help="create and verify a backup before applying deletion")
+    prune.add_argument("--backup-output", help="backup path to use with --backup-first")
     prune.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     prune.set_defaults(func=command_prune)
 

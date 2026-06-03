@@ -317,6 +317,13 @@ To actually delete matched completed messages:
 peerpost prune --team dev --older-than-days 30 --apply
 ```
 
+To create and verify a backup immediately before deletion:
+
+```sh
+peerpost prune --team dev --older-than-days 30 --apply --backup-first
+```
+
+If that backup verification fails, `prune` exits nonzero and does not delete messages.
 `prune` only removes messages whose deliveries are all `done`.
 
 ## Release Checks
