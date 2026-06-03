@@ -473,6 +473,9 @@ class Store:
             quick_check = [
                 row[0] for row in verification.execute("PRAGMA quick_check").fetchall()
             ]
+            foreign_key_check = [
+                tuple(row) for row in verification.execute("PRAGMA foreign_key_check").fetchall()
+            ]
         finally:
             verification.close()
         return {
@@ -480,7 +483,8 @@ class Store:
             "bytes": output_path.stat().st_size,
             "created_at": utc_now(),
             "quick_check": quick_check,
-            "verified": quick_check == ["ok"],
+            "foreign_key_check": foreign_key_check,
+            "verified": quick_check == ["ok"] and not foreign_key_check,
         }
 
     @locked_method

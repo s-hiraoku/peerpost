@@ -219,6 +219,7 @@ class DbTest(unittest.TestCase):
         self.assertGreater(data["bytes"], 0)
         self.assertTrue(data["verified"])
         self.assertEqual(data["quick_check"], ["ok"])
+        self.assertEqual(data["foreign_key_check"], [])
         self.assertTrue(backup_path.exists())
         conn = sqlite3.connect(backup_path)
         try:
@@ -237,6 +238,21 @@ class DbTest(unittest.TestCase):
 
         data = self.store.backup(backup_path, overwrite=True)
         self.assertEqual(data["path"], str(backup_path.resolve()))
+
+    def test_backup_reports_foreign_key_violations(self) -> None:
+        self.store.conn.execute("PRAGMA foreign_keys = OFF")
+        self.store.conn.execute(
+            "INSERT INTO deliveries (message_id, team, to_agent, status) VALUES (?, ?, ?, ?)",
+            ("msg_missing_fk", "dev", "codex", "pending"),
+        )
+        self.store.conn.commit()
+        backup_path = Path(self.tmp.name) / "bad-fk-backup.sqlite"
+
+        data = self.store.backup(backup_path)
+
+        self.assertFalse(data["verified"])
+        self.assertEqual(data["quick_check"], ["ok"])
+        self.assertEqual(data["foreign_key_check"][0][0], "deliveries")
 
     def test_backup_removes_temporary_file_after_failure(self) -> None:
         class FailingConnection:

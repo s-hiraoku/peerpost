@@ -93,7 +93,11 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("future cutoffs", readme)
         self.assertIn("temporary file first", readme)
         self.assertIn("reports whether it was verified", readme)
-        self.assertIn("verifies the snapshot with SQLite `quick_check`", guide)
+        self.assertIn("SQLite `quick_check` and `foreign_key_check` on the backup", readme)
+        self.assertIn(
+            "verifies the snapshot with SQLite `quick_check` and `foreign_key_check`",
+            guide,
+        )
         self.assertIn("Malformed field types return `bad_request`", readme)
         self.assertIn("Priority values are `low`, `normal`, `high`, or `urgent`", readme)
         self.assertIn("Stored metadata must be a JSON object", readme)

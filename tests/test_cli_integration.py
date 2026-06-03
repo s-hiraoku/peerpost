@@ -1538,6 +1538,7 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertGreater(payload["bytes"], 0)
         self.assertTrue(payload["verified"])
         self.assertEqual(payload["quick_check"], ["ok"])
+        self.assertEqual(payload["foreign_key_check"], [])
         conn = sqlite3.connect(backup_path)
         try:
             row = conn.execute("SELECT body FROM messages WHERE id = ?", (message_id,)).fetchone()
@@ -1548,7 +1549,7 @@ class CliIntegrationTest(unittest.TestCase):
         plain_path = Path(self.tmp.name) / "manual-backup-plain.sqlite"
         plain = self.run_peerpost("backup", "--output", str(plain_path))
         self.assertEqual(plain.returncode, 0, plain.stderr)
-        self.assertIn("quick_check verified", plain.stdout)
+        self.assertIn("integrity verified", plain.stdout)
 
     def test_daemon_rejects_oversized_message_body(self) -> None:
         peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])
