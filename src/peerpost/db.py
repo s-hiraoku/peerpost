@@ -514,6 +514,24 @@ class Store:
             tuple(sender_params),
         ).fetchall()
         unregistered_senders = [row_to_dict(row) for row in sender_rows]
+
+        priority_clauses = [f"priority NOT IN ({','.join('?' for _ in ALLOWED_PRIORITIES)})"]
+        priority_params: list[Any] = sorted(ALLOWED_PRIORITIES)
+        if team:
+            priority_clauses.append("team = ?")
+            priority_params.append(team)
+        priority_rows = self.conn.execute(
+            f"""
+            SELECT team, priority, COUNT(*) AS total, MAX(created_at) AS last_message_at
+            FROM messages
+            WHERE {' AND '.join(priority_clauses)}
+            GROUP BY team, priority
+            ORDER BY team, priority
+            """,
+            tuple(priority_params),
+        ).fetchall()
+        invalid_priorities = [row_to_dict(row) for row in priority_rows]
+
         return {
             "team": team,
             "status_counts": status_counts,
@@ -521,6 +539,8 @@ class Store:
             "orphans": orphans,
             "unregistered_sender_count": len(unregistered_senders),
             "unregistered_senders": unregistered_senders,
+            "invalid_priority_count": len(invalid_priorities),
+            "invalid_priorities": invalid_priorities,
         }
 
     @locked_method

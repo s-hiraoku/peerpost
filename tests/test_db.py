@@ -249,6 +249,19 @@ class DbTest(unittest.TestCase):
             ["claud", "claude"],
         )
 
+    def test_delivery_health_reports_invalid_priorities(self) -> None:
+        message, _ = self.store.create_message("dev", "claude", "ok", ["codex"])
+        self.store.conn.execute(
+            "UPDATE messages SET priority = ? WHERE id = ?",
+            ("later", message["id"]),
+        )
+
+        health = self.store.delivery_health("dev")
+
+        self.assertEqual(health["invalid_priority_count"], 1)
+        self.assertEqual(health["invalid_priorities"][0]["priority"], "later")
+        self.assertEqual(health["invalid_priorities"][0]["total"], 1)
+
     def test_team_status_reports_agent_delivery_counts(self) -> None:
         self.store.join_agent("claude", "claude-code", "dev")
         self.store.join_agent("codex", "codex", "dev")

@@ -82,7 +82,7 @@ peerpost doctor
 peerpost doctor --team dev
 ```
 
-`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, and unregistered sender or recipient ids. For scripts:
+`doctor` prints actionable fixes when something is wrong, including CLI/daemon version mismatches, stale autostart files, and local permission issues. With `--team`, it also reports missing agent registrations, pending deliveries, unregistered sender or recipient ids, and invalid historical priority values. For scripts:
 
 ```sh
 peerpost doctor --format json
