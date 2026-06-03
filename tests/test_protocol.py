@@ -60,6 +60,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost status", guide)
+        self.assertIn("--stdin", guide)
         self.assertIn("unique message id prefix", guide)
 
     def test_decode_rejects_non_object_json(self) -> None:

@@ -35,6 +35,12 @@ Send with explicit ids:
 peerpost send --from claude --to codex --team dev "Please review the auth middleware."
 ```
 
+Send a multiline body from stdin:
+
+```sh
+git diff --stat | peerpost send --to claude --stdin
+```
+
 Broadcast to all registered agents in the team except yourself:
 
 ```sh
@@ -68,6 +74,12 @@ Reply to a message:
 
 ```sh
 peerpost reply msg_20260604T010203456Z_a1b2c3 "Done. I left comments."
+```
+
+Reply with a multiline body from stdin:
+
+```sh
+peerpost reply msg_20260604T010203456Z_a1b2c3 --stdin < review-notes.txt
 ```
 
 Mark it done:

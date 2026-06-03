@@ -179,6 +179,60 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(messages[0]["priority"], "high")
         self.assertEqual(messages[0]["parent_id"], "msg_parent")
 
+    def test_send_and_reply_can_read_message_body_from_stdin(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--stdin",
+            input_text="line one\nline two\n",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = sent.stdout.split()[1]
+
+        drained = self.run_peerpost("drain", "--agent", "codex", "--team", "dev", "--format", "json")
+        self.assertEqual(drained.returncode, 0, drained.stderr)
+        self.assertEqual(json.loads(drained.stdout)[0]["body"], "line one\nline two\n")
+
+        reply = self.run_peerpost(
+            "reply",
+            message_id,
+            "--from",
+            "codex",
+            "--team",
+            "dev",
+            "--stdin",
+            input_text="reply line one\nreply line two\n",
+        )
+        self.assertEqual(reply.returncode, 0, reply.stderr)
+
+        response = self.run_peerpost("drain", "--agent", "claude", "--team", "dev", "--format", "json")
+        self.assertEqual(response.returncode, 0, response.stderr)
+        self.assertEqual(json.loads(response.stdout)[0]["body"], "reply line one\nreply line two\n")
+
+    def test_stdin_message_rejects_double_body_input(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        result = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--stdin",
+            "body",
+            input_text="stdin body",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("pass either MESSAGE or --stdin", result.stderr)
+
     def test_reply_sends_back_to_original_sender(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

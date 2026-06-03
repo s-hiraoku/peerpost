@@ -284,14 +284,25 @@ def command_leave(args: argparse.Namespace) -> int:
     return 0
 
 
+def message_body_arg(args: argparse.Namespace) -> str:
+    if args.stdin and args.message is not None:
+        raise ValueError("pass either MESSAGE or --stdin, not both")
+    if args.stdin:
+        return sys.stdin.read()
+    if args.message is None:
+        raise ValueError("missing message body; pass MESSAGE or --stdin")
+    return args.message
+
+
 def command_send(args: argparse.Namespace) -> int:
+    body = message_body_arg(args)
     data = client().request(
         "send",
         from_agent=args.from_agent,
         to_agent=args.to_agent,
         broadcast=args.broadcast,
         team=args.team,
-        body=args.message,
+        body=body,
         kind=args.kind,
         priority=args.priority,
         parent_id=args.reply_to,
@@ -309,12 +320,13 @@ def command_send(args: argparse.Namespace) -> int:
 
 
 def command_reply(args: argparse.Namespace) -> int:
+    body = message_body_arg(args)
     data = client().request(
         "reply",
         from_agent=args.from_agent,
         team=args.team,
         message_id=args.message_id,
-        body=args.message,
+        body=body,
         kind=args.kind,
         priority=args.priority,
     )
@@ -1112,8 +1124,9 @@ def build_parser() -> argparse.ArgumentParser:
         default="normal",
     )
     send.add_argument("--reply-to", help="parent message id this message replies to")
+    send.add_argument("--stdin", action="store_true", help="read message body from stdin")
     send.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
-    send.add_argument("message")
+    send.add_argument("message", nargs="?")
     send.set_defaults(func=command_send)
 
     reply = sub.add_parser("reply")
@@ -1126,8 +1139,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["low", "normal", "high", "urgent"],
         default="normal",
     )
+    reply.add_argument("--stdin", action="store_true", help="read message body from stdin")
     reply.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
-    reply.add_argument("message")
+    reply.add_argument("message", nargs="?")
     reply.set_defaults(func=command_reply)
 
     inbox = sub.add_parser("inbox")
@@ -1289,6 +1303,9 @@ def main(argv: list[str] | None = None) -> int:
     except DaemonNotRunning:
         eprint(NOT_RUNNING)
         return 1
+    except ValueError as exc:
+        eprint(str(exc))
+        return 2
     except PeerpostClientError as exc:
         eprint(str(exc))
         return 1
