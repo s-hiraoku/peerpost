@@ -128,6 +128,7 @@ peerpost doctor --self-test
 ```
 
 `doctor` also reports whether the daemon autostart file is missing, current, or stale.
+With `--team`, it also reports whether that team has registered agents.
 
 Inspect recent daemon events:
 

@@ -439,6 +439,26 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("version 1.0.0", result.stdout)
 
+    def test_doctor_team_reports_agent_registration_health(self) -> None:
+        empty = self.run_peerpost("doctor", "--team", "empty", "--format", "json")
+        self.assertEqual(empty.returncode, 0, empty.stderr)
+        empty_report = json.loads(empty.stdout)
+        empty_checks = {check["name"]: check for check in empty_report["checks"]}
+        self.assertEqual(empty_report["status"], "warnings")
+        self.assertEqual(empty_checks["agents"]["status"], "warn")
+        self.assertIn("has no registered agents", empty_checks["agents"]["detail"])
+        self.assertEqual(empty_checks["agents"]["fix"], "peerpost setup --start-daemon --team empty")
+        self.assertEqual(empty_report["team_status"]["agents"], [])
+
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        configured = self.run_peerpost("doctor", "--team", "dev", "--format", "json")
+        self.assertEqual(configured.returncode, 0, configured.stderr)
+        configured_report = json.loads(configured.stdout)
+        configured_checks = {check["name"]: check for check in configured_report["checks"]}
+        self.assertEqual(configured_report["status"], "ok")
+        self.assertEqual(configured_checks["agents"]["status"], "ok")
+        self.assertEqual(configured_report["team_status"]["agents"][0]["id"], "codex")
+
     def test_doctor_self_test_exercises_delivery_path(self) -> None:
         db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
         before = sqlite3.connect(db_path)

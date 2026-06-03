@@ -758,8 +758,16 @@ def command_doctor(args: argparse.Namespace) -> int:
                 _doctor_check(checks, "self-test", check_status, detail or "completed")
 
     delivery_health: dict[str, Any] | None = None
+    team_status: dict[str, Any] | None = None
     if args.team:
         if not daemon_running:
+            _doctor_check(
+                checks,
+                "agents",
+                "warn",
+                f"skipped team {safe_field(args.team)} because peerpostd is not running",
+                "peerpost daemon start",
+            )
             _doctor_check(
                 checks,
                 "deliveries",
@@ -768,6 +776,27 @@ def command_doctor(args: argparse.Namespace) -> int:
                 "peerpost daemon start",
             )
         else:
+            try:
+                team_status = client().request("team_status", team=args.team)
+            except PeerpostClientError as exc:
+                _doctor_check(checks, "agents", "error", str(exc))
+            else:
+                agent_count = len(team_status.get("agents", []))
+                if agent_count:
+                    _doctor_check(
+                        checks,
+                        "agents",
+                        "ok",
+                        f"team {safe_field(args.team)}: {agent_count} registered agent(s)",
+                    )
+                else:
+                    _doctor_check(
+                        checks,
+                        "agents",
+                        "warn",
+                        f"team {safe_field(args.team)} has no registered agents",
+                        f"peerpost setup --start-daemon --team {safe_field(args.team)}",
+                    )
             try:
                 delivery_health = client().request("delivery_health", team=args.team)
             except PeerpostClientError as exc:
@@ -856,6 +885,7 @@ def command_doctor(args: argparse.Namespace) -> int:
             "daemon": daemon_version,
         },
         "delivery_health": delivery_health,
+        "team_status": team_status,
         "repairs": repairs,
         "self_test": self_test,
         "checks": checks,
