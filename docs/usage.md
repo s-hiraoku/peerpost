@@ -137,6 +137,8 @@ Inspect recent daemon events:
 peerpost logs --tail 50
 ```
 
+`logs --tail` must be zero or greater.
+
 ## 6. Useful Lookups
 
 List agents:
@@ -185,4 +187,4 @@ Apply the deletion:
 peerpost prune --older-than-days 30 --apply
 ```
 
-`prune` requires a positive age or past `--before` timestamp and a positive `--limit`.
+`drain --limit` and `prune --limit` must be positive. `prune` also requires a positive age or past `--before` timestamp.

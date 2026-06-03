@@ -450,6 +450,8 @@ def command_done(args: argparse.Namespace) -> int:
 
 
 def command_drain(args: argparse.Namespace) -> int:
+    if args.limit < 1:
+        raise ValueError("--limit must be 1 or greater")
     if args.output_format in HOOK_FORMATS and _contains_repeat_stop(read_hook_input()):
         print("{}")
         return 0
@@ -567,6 +569,8 @@ def command_paths(_args: argparse.Namespace) -> int:
 
 
 def command_logs(args: argparse.Namespace) -> int:
+    if args.tail < 0:
+        raise ValueError("--tail must be 0 or greater")
     paths = get_paths()
     if not paths.log.exists():
         if args.output_format == "json":

@@ -129,6 +129,10 @@ class DbTest(unittest.TestCase):
         self.store.drain("codex", "dev")
         self.assertEqual(self.store.drain("codex", "dev"), [])
 
+    def test_drain_rejects_non_positive_limit(self) -> None:
+        with self.assertRaisesRegex(ValueError, "limit must be 1 or greater"):
+            self.store.drain("codex", "dev", limit=0)
+
     def test_ack_changes_status_to_acknowledged(self) -> None:
         message, _ = self.store.create_message("dev", "claude", "hello", ["codex"])
         self.assertEqual(self.store.ack([message["id"]], "codex", "dev"), 1)
@@ -155,6 +159,10 @@ class DbTest(unittest.TestCase):
         self.assertEqual(applied["deleted"], 1)
         self.assertIsNone(self.store.delivery_status(done_message["id"], "codex", "dev"))
         self.assertEqual(self.store.delivery_status(pending_message["id"], "codex", "dev"), "pending")
+
+    def test_prune_rejects_non_positive_limit(self) -> None:
+        with self.assertRaisesRegex(ValueError, "limit must be 1 or greater"):
+            self.store.prune_done("9999-01-01T00:00:00Z", limit=0)
 
     def test_backup_creates_readable_sqlite_snapshot(self) -> None:
         message, _ = self.store.create_message("dev", "claude", "backup me", ["codex"])

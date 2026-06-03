@@ -282,6 +282,8 @@ class Store:
 
     @locked_method
     def pending_messages(self, agent_id: str, team: str, limit: int = 20) -> list[Message]:
+        if limit < 1:
+            raise ValueError("limit must be 1 or greater")
         rows = self.conn.execute(
             """
             SELECT
@@ -367,6 +369,8 @@ class Store:
         limit: int = 100,
         apply: bool = False,
     ) -> dict[str, Any]:
+        if limit < 1:
+            raise ValueError("limit must be 1 or greater")
         clauses = ["m.created_at < ?"]
         params: list[Any] = [before]
         if team:

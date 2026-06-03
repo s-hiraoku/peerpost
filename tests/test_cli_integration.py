@@ -1110,6 +1110,37 @@ class CliIntegrationTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertIn(error, result.stderr)
 
+    def test_drain_and_logs_reject_unsafe_limits(self) -> None:
+        drain = self.run_peerpost("drain", "--agent", "codex", "--team", "dev", "--limit", "0")
+        self.assertEqual(drain.returncode, 2)
+        self.assertIn("--limit must be 1 or greater", drain.stderr)
+
+        hook = self.run_peerpost(
+            "drain",
+            "--agent",
+            "codex",
+            "--team",
+            "dev",
+            "--limit",
+            "-1",
+            "--format",
+            "codex-hook",
+        )
+        self.assertEqual(hook.returncode, 2)
+        self.assertEqual(hook.stdout, "")
+        self.assertIn("--limit must be 1 or greater", hook.stderr)
+
+        logs = self.run_peerpost("logs", "--tail", "-1")
+        self.assertEqual(logs.returncode, 2)
+        self.assertIn("--tail must be 0 or greater", logs.stderr)
+
+    def test_daemon_rejects_unsafe_protocol_limits(self) -> None:
+        peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])
+        with self.assertRaisesRegex(PeerpostClientError, "limit must be 1 or greater"):
+            peerpost.request("drain", agent="codex", team="dev", limit=-1)
+        with self.assertRaisesRegex(PeerpostClientError, "limit must be an integer"):
+            peerpost.request("prune", before="9999-01-01T00:00:00Z", limit="many")
+
     def test_backup_creates_readable_sqlite_snapshot(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

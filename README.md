@@ -109,6 +109,8 @@ If the daemon starts but behavior looks wrong, inspect recent daemon events:
 peerpost logs --tail 50
 ```
 
+`logs --tail` rejects negative values.
+
 ## Minimal Agent-To-Agent Flow
 
 Register two local agents if they are not already registered:
@@ -301,7 +303,7 @@ To see old completed messages that can be removed:
 peerpost prune --team dev --older-than-days 30
 ```
 
-`prune` rejects zero or negative ages, future cutoffs, and non-positive limits.
+`drain --limit` and `prune --limit` reject non-positive limits. `prune` also rejects zero or negative ages and future cutoffs.
 
 To actually delete matched completed messages:
 

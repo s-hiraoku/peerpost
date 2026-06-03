@@ -207,6 +207,15 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             raise RequestError("request_too_large", f"body exceeds {MAX_BODY_CHARS} characters")
         return body
 
+    def _positive_int(self, request: dict[str, Any], key: str, default: int) -> int:
+        try:
+            value = int(request.get(key, default))
+        except (TypeError, ValueError) as exc:
+            raise RequestError("bad_request", f"{key} must be an integer") from exc
+        if value < 1:
+            raise RequestError("bad_request", f"{key} must be 1 or greater")
+        return value
+
     def _dispatch(self, request: dict[str, Any]) -> Any:
         request_type = request.get("type")
         store = self.server.store
@@ -286,7 +295,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             messages = store.drain(
                 self._require(request, "agent"),
                 self._require(request, "team"),
-                int(request.get("limit", 20)),
+                self._positive_int(request, "limit", 20),
             )
             return [message.as_dict() for message in messages]
         if request_type == "history":
@@ -305,7 +314,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             return store.prune_done(
                 self._require(request, "before"),
                 request.get("team"),
-                int(request.get("limit", 100)),
+                self._positive_int(request, "limit", 100),
                 bool(request.get("apply", False)),
             )
         if request_type == "backup":
