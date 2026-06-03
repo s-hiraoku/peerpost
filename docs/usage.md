@@ -43,6 +43,8 @@ Send with explicit ids:
 peerpost send --from claude --to codex --team dev "Please review the auth middleware."
 ```
 
+If the sender or direct recipient id is not registered, `send` stores the message and prints a warning.
+
 Send a multiline body from stdin:
 
 ```sh

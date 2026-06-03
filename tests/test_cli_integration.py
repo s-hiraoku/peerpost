@@ -156,6 +156,29 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(payload["unregistered_targets"], ["cdoex"])
         self.assertIn("warning: unregistered recipient id(s): cdoex", sent.stderr)
 
+    def test_send_warns_for_unregistered_sender(self) -> None:
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claud",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "typo sender",
+        )
+
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        payload = json.loads(sent.stdout)
+        self.assertTrue(payload["unregistered_from_agent"])
+        self.assertEqual(payload["unregistered_targets"], [])
+        self.assertIn("warning: sender agent is not registered: claud", sent.stderr)
+        self.assertIn("peerpost join --agent claud --type generic --team dev", sent.stderr)
+
     def test_send_reply_priority_metadata_is_drained_as_json(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

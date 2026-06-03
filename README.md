@@ -130,7 +130,7 @@ For multiline content, read the body from stdin:
 git diff --stat | peerpost send --from codex --to claude --team dev --stdin
 ```
 
-If a direct recipient id is not registered, `send` still stores the message but prints a warning so typos are easier to catch.
+If the sender or a direct recipient id is not registered, `send` still stores the message but prints a warning so typos are easier to catch.
 
 Receive pending messages:
 

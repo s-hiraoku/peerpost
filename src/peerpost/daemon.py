@@ -382,6 +382,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         team = self._require(request, "team")
         from_agent = self._require(request, "from_agent")
         body = self._require_body(request)
+        unregistered_from_agent = store.get_agent(from_agent, team) is None
         if request.get("broadcast"):
             targets = store.broadcast_targets(team, from_agent)
             unregistered_targets: list[str] = []
@@ -402,7 +403,13 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             priority=request.get("priority", "normal"),
             parent_id=request.get("parent_id"),
         )
-        return self._deliver_to_live_targets(message, targets, team, unregistered_targets)
+        return self._deliver_to_live_targets(
+            message,
+            targets,
+            team,
+            unregistered_targets,
+            unregistered_from_agent,
+        )
 
     def _reply(self, request: dict[str, Any]) -> dict[str, Any]:
         store = self.server.store
@@ -410,6 +417,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         from_agent = self._require(request, "from_agent")
         parent_id = self._resolve_message_id(team, self._require(request, "message_id"), from_agent)
         body = self._require_body(request)
+        unregistered_from_agent = store.get_agent(from_agent, team) is None
         parent = store.get_message_for_agent(parent_id, from_agent, team)
         if parent is None:
             raise RequestError("not_found", "message not found for this agent/team")
@@ -424,7 +432,13 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             priority=request.get("priority", "normal"),
             parent_id=parent_id,
         )
-        return self._deliver_to_live_targets(message, targets, team, unregistered_targets)
+        return self._deliver_to_live_targets(
+            message,
+            targets,
+            team,
+            unregistered_targets,
+            unregistered_from_agent,
+        )
 
     def _deliver_to_live_targets(
         self,
@@ -432,6 +446,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         targets: list[str],
         team: str,
         unregistered_targets: list[str] | None = None,
+        unregistered_from_agent: bool = False,
     ) -> dict[str, Any]:
         store = self.server.store
         delivered_now: list[str] = []
@@ -453,6 +468,7 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
             "targets": targets,
             "delivered_now": delivered_now,
             "unregistered_targets": unregistered_targets or [],
+            "unregistered_from_agent": unregistered_from_agent,
         }
 
     def _handle_subscribe(self, request: dict[str, Any]) -> None:

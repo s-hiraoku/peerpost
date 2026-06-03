@@ -342,7 +342,7 @@ def command_send(args: argparse.Namespace) -> int:
         priority=args.priority,
         parent_id=args.reply_to,
     )
-    warn_unregistered_targets(data)
+    warn_unregistered_agents(data)
     if args.output_format == "json":
         print(format_json(data))
         return 0
@@ -365,7 +365,7 @@ def command_reply(args: argparse.Namespace) -> int:
         kind=args.kind,
         priority=args.priority,
     )
-    warn_unregistered_targets(data)
+    warn_unregistered_agents(data)
     if args.output_format == "json":
         print(format_json(data))
         return 0
@@ -381,7 +381,14 @@ def command_reply(args: argparse.Namespace) -> int:
     return 0
 
 
-def warn_unregistered_targets(data: dict[str, Any]) -> None:
+def warn_unregistered_agents(data: dict[str, Any]) -> None:
+    if data.get("unregistered_from_agent"):
+        message = data["message"]
+        eprint(
+            "warning: sender agent is not registered: "
+            f"{safe_field(message['from_agent'])}. Register with: peerpost join --agent "
+            f"{safe_field(message['from_agent'])} --type generic --team {safe_field(message['team'])}"
+        )
     targets = data.get("unregistered_targets") or []
     if targets:
         safe_targets = ", ".join(safe_field(target) for target in targets)

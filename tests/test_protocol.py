@@ -64,6 +64,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("private file and socket permissions", readme)
         self.assertIn("undeliverable empty broadcast", readme)
         self.assertIn("Broadcast fails if no other agent is registered", guide)
+        self.assertIn("sender or a direct recipient id is not registered", readme)
+        self.assertIn("sender or direct recipient id is not registered", guide)
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost history", guide)
