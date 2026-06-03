@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable
 
-from .security import indent_body, strip_control_chars
+from .security import indent_body, safe_field
 
 
 HOOK_SAFETY_PREAMBLE = (
@@ -31,14 +31,15 @@ def format_plain(messages: Iterable[Any]) -> str:
         body = indent_body(str(message["body"]), prefix="    ")
         details: list[str] = []
         if message.get("priority") and message.get("priority") != "normal":
-            details.append(f"priority={message['priority']}")
+            details.append(f"priority={safe_field(message['priority'])}")
         if message.get("kind") and message.get("kind") != "message":
-            details.append(f"kind={message['kind']}")
+            details.append(f"kind={safe_field(message['kind'])}")
         if message.get("parent_id"):
-            details.append(f"reply_to={message['parent_id']}")
+            details.append(f"reply_to={safe_field(message['parent_id'])}")
         suffix = f" ({', '.join(details)})" if details else ""
         lines.append(
-            f"[{message['created_at']}] {message['from_agent']} -> {message['to_agent']}{suffix}: {body}"
+            f"[{safe_field(message['created_at'])}] "
+            f"{safe_field(message['from_agent'])} -> {safe_field(message['to_agent'])}{suffix}: {body}"
         )
     return "\n".join(lines)
 
@@ -47,9 +48,9 @@ def format_monitor(message: Any) -> str:
     data = _message_dict(message)
     body = indent_body(str(data["body"]), prefix="  ")
     return (
-        f"peerpost | {data['created_at']} | {data['team']} | "
-        f"{data['from_agent']} \u2192 {data['to_agent']} | "
-        f"{data.get('priority', 'normal')} | {body}"
+        f"peerpost | {safe_field(data['created_at'])} | {safe_field(data['team'])} | "
+        f"{safe_field(data['from_agent'])} \u2192 {safe_field(data['to_agent'])} | "
+        f"{safe_field(data.get('priority', 'normal'))} | {body}"
     )
 
 
@@ -66,7 +67,7 @@ def format_hook(messages: Iterable[Any]) -> str:
     if not data:
         return "{}"
     message_text = format_plain(data)
-    reason = f"{HOOK_SAFETY_PREAMBLE}\n\n{strip_control_chars(message_text)}"
+    reason = f"{HOOK_SAFETY_PREAMBLE}\n\n{message_text}"
     return json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False)
 
 

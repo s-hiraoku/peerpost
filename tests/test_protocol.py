@@ -7,7 +7,7 @@ import tomllib
 import unittest
 from pathlib import Path
 
-from peerpost.formatters import HOOK_SAFETY_PREAMBLE, format_hook
+from peerpost.formatters import HOOK_SAFETY_PREAMBLE, format_hook, format_monitor, format_plain
 from peerpost.protocol import ProtocolError, decode_json_line, encode_json_line
 
 
@@ -107,6 +107,34 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("red", reason)
         self.assertNotIn("\x1b", reason)
         self.assertNotIn("\x07", reason)
+
+    def test_terminal_formatters_sanitize_message_metadata_fields(self) -> None:
+        message = {
+            "id": "msg_1",
+            "team": "dev\x1b[0m\nforged",
+            "from_agent": "\x1b[31mclaude\x1b[0m\nforged",
+            "to_agent": "codex\x07",
+            "body": "safe body",
+            "created_at": "2026-05-30T12:34:56Z\x1b[0m",
+            "priority": "urgent\nforged",
+            "kind": "message",
+            "parent_id": "msg_parent\nforged",
+        }
+
+        plain = format_plain([message])
+        monitor = format_monitor(message)
+        reason = json.loads(format_hook([message]))["reason"]
+
+        for output in (plain, monitor, reason):
+            self.assertNotIn("\x1b", output)
+            self.assertNotIn("\x07", output)
+            self.assertNotIn("claude\nforged", output)
+            self.assertNotIn("urgent\nforged", output)
+            self.assertNotIn("msg_parent\nforged", output)
+        self.assertNotIn("dev\nforged", monitor)
+        self.assertIn("claude forged -> codex", plain)
+        self.assertIn("dev forged", monitor)
+        self.assertIn("priority=urgent forged", reason)
 
 
 if __name__ == "__main__":

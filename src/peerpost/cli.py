@@ -21,6 +21,7 @@ from . import __version__
 from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
 from .formatters import format_drain, format_json, format_monitor, format_plain
 from .paths import ensure_home, get_paths, restrict_file
+from .security import safe_field
 
 
 KNOWN_AGENT_TYPES = {"claude-code", "codex", "copilot", "antigravity", "generic"}
@@ -159,7 +160,7 @@ def command_daemon(args: argparse.Namespace) -> int:
 
 def command_join(args: argparse.Namespace) -> int:
     if args.agent_type not in KNOWN_AGENT_TYPES:
-        eprint(f"warning: unknown agent type '{args.agent_type}', allowing it")
+        eprint(f"warning: unknown agent type '{safe_field(args.agent_type)}', allowing it")
     data = client().request(
         "join",
         agent=args.agent,
@@ -170,7 +171,10 @@ def command_join(args: argparse.Namespace) -> int:
     if args.output_format == "json":
         print(format_json(data))
         return 0
-    print(f"joined {data['id']} ({data['agent_type']}) in team {data['team']}")
+    print(
+        f"joined {safe_field(data['id'])} ({safe_field(data['agent_type'])}) "
+        f"in team {safe_field(data['team'])}"
+    )
     return 0
 
 
@@ -184,7 +188,10 @@ def command_agents(args: argparse.Namespace) -> int:
         return 0
     for agent in agents:
         workspace = f" {agent['workspace']}" if agent.get("workspace") else ""
-        print(f"{agent['team']}/{agent['id']} {agent['agent_type']}{workspace}")
+        print(
+            f"{safe_field(agent['team'])}/{safe_field(agent['id'])} "
+            f"{safe_field(agent['agent_type'])}{workspace}"
+        )
     return 0
 
 
@@ -194,9 +201,9 @@ def command_leave(args: argparse.Namespace) -> int:
         print(format_json({"agent": args.agent, "team": args.team, **data}))
         return 0
     if data["removed"]:
-        print(f"left {args.agent} from team {args.team}")
+        print(f"left {safe_field(args.agent)} from team {safe_field(args.team)}")
     else:
-        print(f"{args.agent} was not registered in team {args.team}")
+        print(f"{safe_field(args.agent)} was not registered in team {safe_field(args.team)}")
     return 0
 
 
@@ -216,10 +223,11 @@ def command_send(args: argparse.Namespace) -> int:
     if args.output_format == "json":
         print(format_json(data))
         return 0
-    targets = ", ".join(data["targets"]) if data["targets"] else "(none)"
-    print(f"sent {data['message']['id']} to {targets}")
+    targets = ", ".join(safe_field(target) for target in data["targets"]) if data["targets"] else "(none)"
+    print(f"sent {safe_field(data['message']['id'])} to {targets}")
     if data.get("delivered_now"):
-        print(f"delivered now: {', '.join(data['delivered_now'])}")
+        delivered = ", ".join(safe_field(target) for target in data["delivered_now"])
+        print(f"delivered now: {delivered}")
     return 0
 
 
@@ -237,20 +245,25 @@ def command_reply(args: argparse.Namespace) -> int:
     if args.output_format == "json":
         print(format_json(data))
         return 0
-    targets = ", ".join(data["targets"]) if data["targets"] else "(none)"
-    print(f"sent {data['message']['id']} in reply to {args.message_id} to {targets}")
+    targets = ", ".join(safe_field(target) for target in data["targets"]) if data["targets"] else "(none)"
+    print(
+        f"sent {safe_field(data['message']['id'])} in reply to "
+        f"{safe_field(args.message_id)} to {targets}"
+    )
     if data.get("delivered_now"):
-        print(f"delivered now: {', '.join(data['delivered_now'])}")
+        delivered = ", ".join(safe_field(target) for target in data["delivered_now"])
+        print(f"delivered now: {delivered}")
     return 0
 
 
 def warn_unregistered_targets(data: dict[str, Any]) -> None:
     targets = data.get("unregistered_targets") or []
     if targets:
+        safe_targets = ", ".join(safe_field(target) for target in targets)
         eprint(
             "warning: unregistered recipient id(s): "
-            f"{', '.join(targets)}. Check with: peerpost agents --team "
-            f"{data['message']['team']}"
+            f"{safe_targets}. Check with: peerpost agents --team "
+            f"{safe_field(data['message']['team'])}"
         )
 
 
@@ -572,7 +585,13 @@ def command_doctor(args: argparse.Namespace) -> int:
     delivery_health: dict[str, Any] | None = None
     if args.team:
         if not daemon_running:
-            _doctor_check(checks, "deliveries", "warn", f"skipped team {args.team} because peerpostd is not running", "peerpost daemon start")
+            _doctor_check(
+                checks,
+                "deliveries",
+                "warn",
+                f"skipped team {safe_field(args.team)} because peerpostd is not running",
+                "peerpost daemon start",
+            )
         else:
             try:
                 delivery_health = client().request("delivery_health", team=args.team)
@@ -583,7 +602,7 @@ def command_doctor(args: argparse.Namespace) -> int:
                 pending = int(status_counts.get("pending", 0))
                 orphan_count = int(delivery_health.get("orphan_count", 0))
                 detail = (
-                    f"team {args.team}: {pending} pending, "
+                    f"team {safe_field(args.team)}: {pending} pending, "
                     f"{orphan_count} unregistered recipient(s)"
                 )
                 if orphan_count:
@@ -593,7 +612,7 @@ def command_doctor(args: argparse.Namespace) -> int:
                         "warn",
                         detail,
                         "check recipient ids with: peerpost agents --team "
-                        f"{args.team}",
+                        f"{safe_field(args.team)}",
                     )
                 else:
                     _doctor_check(checks, "deliveries", "ok", detail)
@@ -806,7 +825,7 @@ def command_setup(args: argparse.Namespace) -> int:
     registered_agents: list[dict[str, Any]] = []
     for agent, agent_type in registrations:
         if agent_type not in KNOWN_AGENT_TYPES:
-            eprint(f"warning: unknown agent type '{agent_type}', allowing it")
+            eprint(f"warning: unknown agent type '{safe_field(agent_type)}', allowing it")
         registered_agents.append(
             client().request(
                 "join",
@@ -851,7 +870,10 @@ def command_setup(args: argparse.Namespace) -> int:
         print()
         print("registered agents:")
         for agent in registered_agents:
-            print(f"{agent['team']}/{agent['id']} {agent['agent_type']}")
+            print(
+                f"{safe_field(agent['team'])}/{safe_field(agent['id'])} "
+                f"{safe_field(agent['agent_type'])}"
+            )
     if snippets:
         print()
         print("agent snippets:")

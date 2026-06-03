@@ -27,6 +27,11 @@ def strip_control_chars(value: str) -> str:
     return "".join(cleaned)
 
 
+def safe_field(value: object) -> str:
+    """Sanitize a single-line field for terminal output."""
+    return " ".join(strip_control_chars(str(value)).split())
+
+
 def indent_body(body: str, prefix: str = "  ") -> str:
     body = strip_control_chars(body)
     return ("\n" + prefix).join(body.splitlines()) if body else ""

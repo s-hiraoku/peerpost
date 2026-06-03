@@ -300,7 +300,7 @@ The default socket is:
 
 peerpost stores and transports text only. It never evaluates, interpolates, shells out from, or executes message bodies.
 
-Hook and monitor output strips ANSI and other terminal control characters while preserving ordinary text, newlines, and tabs.
+Hook, monitor, and plain message output strips ANSI and other terminal control characters. Message bodies preserve ordinary newlines and tabs with indentation; metadata fields such as agent and team ids are rendered as single-line fields.
 
 Daemon requests are newline-delimited JSON and are capped at 1 MiB per request line. Message bodies are capped at 200,000 characters.
 
