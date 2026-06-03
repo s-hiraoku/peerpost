@@ -707,6 +707,9 @@ def command_doctor(args: argparse.Namespace) -> int:
                 quick_check = [
                     row[0] for row in conn.execute("PRAGMA quick_check").fetchall()
                 ]
+                foreign_key_check = [
+                    tuple(row) for row in conn.execute("PRAGMA foreign_key_check").fetchall()
+                ]
             finally:
                 conn.close()
             detail = f"{paths.db} mode {_mode(paths.db)}"
@@ -714,6 +717,8 @@ def command_doctor(args: argparse.Namespace) -> int:
                 detail += f" schema_version {version[0]}"
             if quick_check == ["ok"]:
                 detail += " quick_check ok"
+            if not foreign_key_check:
+                detail += " foreign_key_check ok"
             db_mode = _mode_int(paths.db)
             sidecar_modes = {
                 sidecar: _mode_int(sidecar)
@@ -732,6 +737,21 @@ def command_doctor(args: argparse.Namespace) -> int:
                     "error",
                     f"{detail}; quick_check failed: "
                     f"{'; '.join(str(item) for item in quick_check)}",
+                    "restore from a recent peerpost backup",
+                )
+            elif foreign_key_check:
+                foreign_key_detail = "; ".join(
+                    f"{table} rowid={rowid} parent={parent} fkid={fkid}"
+                    for table, rowid, parent, fkid in foreign_key_check[:5]
+                )
+                remaining = len(foreign_key_check) - 5
+                if remaining > 0:
+                    foreign_key_detail += f"; +{remaining} more"
+                _doctor_check(
+                    checks,
+                    "database",
+                    "error",
+                    f"{detail}; foreign_key_check failed: {foreign_key_detail}",
                     "restore from a recent peerpost backup",
                 )
             elif version and version[0] != "1":

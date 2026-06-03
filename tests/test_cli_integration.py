@@ -454,9 +454,34 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(checks["version"]["status"], "ok")
         self.assertEqual(checks["database"]["status"], "ok")
         self.assertIn("quick_check ok", checks["database"]["detail"])
+        self.assertIn("foreign_key_check ok", checks["database"]["detail"])
         self.assertEqual(checks["socket"]["status"], "ok")
         self.assertEqual(checks["autostart"]["status"], "info")
         self.assertIn("log", checks)
+
+    def test_doctor_reports_foreign_key_violations(self) -> None:
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute(
+                "INSERT INTO deliveries (message_id, team, to_agent, status) "
+                "VALUES (?, ?, ?, ?)",
+                ("msg_missing_fk", "dev", "codex", "pending"),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        result = self.run_peerpost("doctor", "--format", "json")
+
+        self.assertEqual(result.returncode, 1, result.stdout)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "errors")
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["database"]["status"], "error")
+        self.assertIn("foreign_key_check failed", checks["database"]["detail"])
+        self.assertIn("restore from a recent peerpost backup", checks["database"]["fix"])
 
     def test_daemon_status_reports_version(self) -> None:
         result = self.run_peerpost("daemon", "status")
@@ -716,6 +741,7 @@ class CliIntegrationTest(unittest.TestCase):
         checks = {check["name"]: check for check in report["checks"]}
         self.assertEqual(checks["database"]["status"], "ok")
         self.assertIn("quick_check ok", checks["database"]["detail"])
+        self.assertIn("foreign_key_check ok", checks["database"]["detail"])
 
     def test_doctor_fix_removes_stale_socket(self) -> None:
         self._stop_daemon()
