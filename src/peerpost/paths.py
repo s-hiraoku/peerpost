@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 APP_DIR = "peerpost"
+MAX_UNIX_SOCKET_PATH_BYTES = 100
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,21 @@ def default_socket() -> Path:
     if configured:
         return Path(configured).expanduser()
     return Path(f"/tmp/peerpost-{os.getuid()}.sock")
+
+
+def unix_socket_path_bytes(path: Path) -> int:
+    return len(os.fsencode(str(path)))
+
+
+def unix_socket_path_too_long(path: Path) -> bool:
+    return unix_socket_path_bytes(path) >= MAX_UNIX_SOCKET_PATH_BYTES
+
+
+def unix_socket_path_length_message(path: Path) -> str:
+    return (
+        f"{path} is {unix_socket_path_bytes(path)} bytes; "
+        f"keep PEERPOST_SOCKET below {MAX_UNIX_SOCKET_PATH_BYTES} bytes"
+    )
 
 
 def get_paths() -> PeerpostPaths:

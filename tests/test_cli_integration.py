@@ -460,6 +460,56 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(checks["autostart"]["status"], "info")
         self.assertIn("log", checks)
 
+    def test_doctor_warns_about_long_socket_path(self) -> None:
+        env = {
+            **self.env,
+            "PEERPOST_SOCKET": str(Path(self.tmp.name) / ("peerpost-" + "x" * 120 + ".sock")),
+        }
+
+        result = self.run_peerpost("doctor", "--format", "json", env=env)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["status"], "warnings")
+        checks = {check["name"]: check for check in report["checks"]}
+        self.assertEqual(checks["socket-path"]["status"], "warn")
+        self.assertIn("keep PEERPOST_SOCKET below", checks["socket-path"]["detail"])
+        self.assertEqual(
+            checks["socket-path"]["fix"],
+            "export PEERPOST_SOCKET=/tmp/peerpost-$(id -u).sock",
+        )
+
+    def test_daemon_start_rejects_long_socket_path(self) -> None:
+        env = {
+            **self.env,
+            "PEERPOST_SOCKET": str(Path(self.tmp.name) / ("peerpost-" + "x" * 120 + ".sock")),
+        }
+
+        result = self.run_peerpost("daemon", "start", env=env)
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("socket path too long", result.stderr)
+        self.assertIn("PEERPOST_SOCKET", result.stderr)
+
+    def test_peerpostd_rejects_long_socket_path(self) -> None:
+        env = {
+            **self.env,
+            "PEERPOST_SOCKET": str(Path(self.tmp.name) / ("peerpost-" + "x" * 120 + ".sock")),
+        }
+
+        result = subprocess.run(
+            [sys.executable, "-m", "peerpost.daemon", "--foreground"],
+            cwd=ROOT,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("socket path too long", result.stderr)
+
     def test_doctor_reports_foreign_key_violations(self) -> None:
         db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
         conn = sqlite3.connect(db_path)

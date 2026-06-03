@@ -89,7 +89,7 @@ peerpost doctor --format json
 peerpost doctor --strict
 ```
 
-To repair safe local filesystem issues such as permissions and stale socket files:
+To repair safe local filesystem issues such as permissions and stale pid or socket files:
 
 ```sh
 peerpost doctor --fix
@@ -357,6 +357,8 @@ The default socket is:
 ```text
 /tmp/peerpost-<uid>.sock
 ```
+
+Keep custom `PEERPOST_SOCKET` values short. `peerpost doctor` warns when the Unix socket path is long enough to fail on common platforms.
 
 ## Safety Model
 

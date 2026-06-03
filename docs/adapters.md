@@ -24,7 +24,7 @@ export PEERPOST_AGENT=codex
 
 After that, commands like `peerpost drain` and `peerpost subscribe --format monitor` use the current team and agent automatically. Agent config snippets below stay fully explicit so they are easy to paste into hook and monitor settings.
 
-If `doctor` reports local permission or stale socket issues, run:
+If `doctor` reports local permission or stale pid/socket issues, run:
 
 ```sh
 peerpost doctor --fix

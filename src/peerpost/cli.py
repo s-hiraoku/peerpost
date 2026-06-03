@@ -20,7 +20,14 @@ from typing import Any
 from . import __version__
 from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
 from .formatters import format_drain, format_json, format_monitor, format_plain
-from .paths import ensure_home, get_paths, restrict_file, sqlite_sidecar_paths
+from .paths import (
+    ensure_home,
+    get_paths,
+    restrict_file,
+    sqlite_sidecar_paths,
+    unix_socket_path_length_message,
+    unix_socket_path_too_long,
+)
 from .security import safe_field, strip_control_chars
 
 
@@ -170,6 +177,10 @@ def _contains_repeat_stop(payload: Any) -> bool:
 def command_daemon(args: argparse.Namespace) -> int:
     paths = ensure_home(get_paths())
     if args.daemon_command == "start":
+        if unix_socket_path_too_long(paths.socket):
+            eprint(f"socket path too long: {unix_socket_path_length_message(paths.socket)}")
+            eprint("set PEERPOST_SOCKET to a shorter path such as /tmp/peerpost-$(id -u).sock")
+            return 2
         if args.foreground:
             from .daemon import serve_foreground
 
@@ -997,6 +1008,15 @@ def command_doctor(args: argparse.Namespace) -> int:
                 else:
                     _doctor_check(checks, "deliveries", "ok", detail)
 
+    if unix_socket_path_too_long(paths.socket):
+        _doctor_check(
+            checks,
+            "socket-path",
+            "warn",
+            unix_socket_path_length_message(paths.socket),
+            "export PEERPOST_SOCKET=/tmp/peerpost-$(id -u).sock",
+        )
+
     socket_reported = False
     if args.fix and paths.socket.exists() and not daemon_running:
         try:
@@ -1599,7 +1619,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--fix",
         action="store_true",
-        help="repair safe local filesystem issues such as permissions and stale sockets",
+        help="repair safe local filesystem issues such as permissions and stale pid/socket files",
     )
     doctor.add_argument(
         "--self-test",

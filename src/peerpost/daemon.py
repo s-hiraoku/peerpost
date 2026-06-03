@@ -17,7 +17,14 @@ from typing import Any
 
 from . import __version__
 from .db import ALLOWED_PRIORITIES, Store
-from .paths import PeerpostPaths, ensure_home, get_paths, restrict_file
+from .paths import (
+    PeerpostPaths,
+    ensure_home,
+    get_paths,
+    restrict_file,
+    unix_socket_path_length_message,
+    unix_socket_path_too_long,
+)
 from .protocol import (
     MAX_BODY_CHARS,
     MAX_JSON_LINE_BYTES,
@@ -569,6 +576,8 @@ def write_pid(paths: PeerpostPaths) -> None:
 
 def serve_foreground(paths: PeerpostPaths | None = None) -> None:
     paths = ensure_home(paths or get_paths())
+    if unix_socket_path_too_long(paths.socket):
+        raise RuntimeError(f"socket path too long: {unix_socket_path_length_message(paths.socket)}")
     logger = configure_logging(paths)
     logger.info("peerpostd starting pid=%s", os.getpid())
     server = PeerpostUnixServer(paths)
