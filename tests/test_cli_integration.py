@@ -1524,6 +1524,7 @@ class CliIntegrationTest(unittest.TestCase):
             (("--before", "not-a-time"), "--before must be a valid UTC ISO timestamp"),
             (("--before", "2999-01-01T00:00:00Z"), "--before must be in the past"),
             (("--backup-first",), "--backup-first requires --apply"),
+            (("--backup-output", "ignored.sqlite"), "--backup-output requires --backup-first"),
         ]
         for extra_args, error in cases:
             with self.subTest(extra_args=extra_args):

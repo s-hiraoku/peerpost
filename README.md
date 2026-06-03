@@ -324,6 +324,7 @@ peerpost prune --team dev --older-than-days 30 --apply --backup-first
 ```
 
 If that backup verification fails, `prune` exits nonzero and does not delete messages.
+Use `--backup-output <path>` with `--backup-first` to choose the backup file.
 `prune` only removes messages whose deliveries are all `done`.
 
 ## Release Checks

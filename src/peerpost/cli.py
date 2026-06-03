@@ -543,6 +543,8 @@ def prune_cutoff(args: argparse.Namespace) -> str:
 
 
 def command_prune(args: argparse.Namespace) -> int:
+    if args.backup_output and not args.backup_first:
+        raise ValueError("--backup-output requires --backup-first")
     before = prune_cutoff(args)
     backup_data: dict[str, Any] | None = None
     if args.backup_first:

@@ -108,6 +108,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("positive age or past `--before` timestamp", guide)
         self.assertIn("prune --team dev --older-than-days 30 --apply --backup-first", readme)
         self.assertIn("does not delete messages", guide)
+        self.assertIn("--backup-output <path>` with `--backup-first", readme)
+        self.assertIn("--backup-output <path>` with `--backup-first", guide)
         self.assertIn("export PEERPOST_TEAM=dev", guide)
         self.assertIn("peerpost drain", guide)
         self.assertIn("peerpost history", guide)
