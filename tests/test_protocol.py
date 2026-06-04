@@ -53,17 +53,31 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("python -m unittest discover -v", workflow)
         self.assertIn("python -m pip wheel . --no-deps", workflow)
 
+    def test_pages_workflow_publishes_user_guide(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "pages.yml").read_text(encoding="utf-8")
+        index = (ROOT / "docs" / "index.md").read_text(encoding="utf-8")
+        config = (ROOT / "docs" / "_config.yml").read_text(encoding="utf-8")
+        self.assertIn("actions/jekyll-build-pages", workflow)
+        self.assertIn("actions/deploy-pages", workflow)
+        self.assertIn("source: ./docs", workflow)
+        self.assertIn("# peerpost User Guide", index)
+        self.assertIn("[Daily Usage](usage.md)", index)
+        self.assertIn("[Agent Adapter Setup](adapters.md)", index)
+        self.assertIn("theme: jekyll-theme-minimal", config)
+
     def test_release_checklist_documents_runtime_smoke_test(self) -> None:
         checklist = (ROOT / "docs" / "release.md").read_text(encoding="utf-8")
         self.assertIn("peerpost doctor --self-test", checklist)
         self.assertIn("peerpost status --team dev", checklist)
         self.assertIn("peerpost backup", checklist)
         self.assertIn("peerpost daemon stop", checklist)
+        self.assertIn("Pages workflow publishes the user guide", checklist)
 
     def test_usage_guide_documents_daily_workflow(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         guide = (ROOT / "docs" / "usage.md").read_text(encoding="utf-8")
         self.assertIn("[Usage Guide](docs/usage.md)", readme)
+        self.assertIn("https://s-hiraoku.github.io/peerpost/", readme)
         self.assertIn("peerpost quickstart", guide)
         self.assertIn("peerpost daemon install-autostart", readme)
         self.assertIn("peerpost daemon install-autostart", guide)

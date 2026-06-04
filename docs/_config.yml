@@ -1,0 +1,4 @@
+title: peerpost
+description: Local-first peer-agent message bus
+markdown: kramdown
+theme: jekyll-theme-minimal

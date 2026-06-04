@@ -55,3 +55,5 @@ Before tagging:
 ## CI
 
 GitHub Actions runs compile, unittest, and wheel build on push and pull requests. Do not release from a commit whose CI result is failing or unknown.
+
+The Pages workflow publishes the user guide from `docs/` to <https://s-hiraoku.github.io/peerpost/> on pushes to `main`. Confirm the latest Pages deployment is successful after release documentation changes.
