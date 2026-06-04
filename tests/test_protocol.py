@@ -39,6 +39,14 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("MIT License", license_text)
         self.assertIn("Permission is hereby granted", license_text)
 
+    def test_gitignore_excludes_local_runtime_artifacts(self) -> None:
+        gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn(".DS_Store", gitignore)
+        self.assertIn("peerpost.sqlite*", gitignore)
+        self.assertIn("peerpost.pid", gitignore)
+        self.assertIn("peerpost.log", gitignore)
+        self.assertIn("backups/", gitignore)
+
     def test_ci_workflow_runs_tests_and_wheel_build(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
         self.assertIn("python -m compileall -q src tests", workflow)

@@ -1,3 +1,4 @@
+.DS_Store
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -7,3 +8,9 @@ build/
 dist/
 .venv/
 venv/
+
+# Local peerpost state, in case PEERPOST_HOME is pointed inside the repo.
+peerpost.sqlite*
+peerpost.pid
+peerpost.log
+backups/
