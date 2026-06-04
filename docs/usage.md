@@ -2,6 +2,8 @@
 
 This guide covers the daily peerpost workflow for local CLI agents.
 
+For a compact list of available commands, see [Command Reference](commands.md).
+
 ## 1. Start Once
 
 Run:

@@ -27,7 +27,7 @@ peerpostd
 
 peerpost has no runtime dependencies outside the Python standard library.
 
-For day-to-day command examples, see [Usage Guide](docs/usage.md) or the GitHub Pages user guide at <https://s-hiraoku.github.io/peerpost/>. For agent hook and monitor setup, see [Adapter Setup](docs/adapters.md).
+For day-to-day command examples, see [Usage Guide](docs/usage.md), [Command Reference](docs/commands.md), or the GitHub Pages user guide at <https://s-hiraoku.github.io/peerpost/>. For agent hook and monitor setup, see [Adapter Setup](docs/adapters.md).
 
 ## Fast Setup On This PC
 

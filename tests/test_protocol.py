@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -7,11 +8,20 @@ import tomllib
 import unittest
 from pathlib import Path
 
+from peerpost.cli import build_parser
 from peerpost.formatters import HOOK_SAFETY_PREAMBLE, format_hook, format_monitor, format_plain
 from peerpost.protocol import ProtocolError, decode_json_line, encode_json_line
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _parser_choices(parser: object) -> dict[str, argparse.ArgumentParser]:
+    for action in getattr(parser, "_actions", []):
+        choices = getattr(action, "choices", None)
+        if isinstance(choices, dict) and choices:
+            return choices
+    raise AssertionError("parser does not define subcommands")
 
 
 class ProtocolTest(unittest.TestCase):
@@ -63,7 +73,19 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("# peerpost User Guide", index)
         self.assertIn("[Daily Usage](usage.md)", index)
         self.assertIn("[Agent Adapter Setup](adapters.md)", index)
+        self.assertIn("[Command Reference](commands.md)", index)
         self.assertIn("theme: jekyll-theme-minimal", config)
+
+    def test_command_reference_documents_cli_commands(self) -> None:
+        reference = (ROOT / "docs" / "commands.md").read_text(encoding="utf-8")
+        parser = build_parser()
+        top_level = _parser_choices(parser)
+        self.assertGreaterEqual(len(top_level), 20)
+        for command in sorted(top_level):
+            self.assertIn(f"peerpost {command}", reference)
+        daemon = top_level["daemon"]
+        for command in sorted(_parser_choices(daemon)):
+            self.assertIn(f"peerpost daemon {command}", reference)
 
     def test_release_checklist_documents_runtime_smoke_test(self) -> None:
         checklist = (ROOT / "docs" / "release.md").read_text(encoding="utf-8")
@@ -77,6 +99,8 @@ class ProtocolTest(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         guide = (ROOT / "docs" / "usage.md").read_text(encoding="utf-8")
         self.assertIn("[Usage Guide](docs/usage.md)", readme)
+        self.assertIn("[Command Reference](docs/commands.md)", readme)
+        self.assertIn("[Command Reference](commands.md)", guide)
         self.assertIn("https://s-hiraoku.github.io/peerpost/", readme)
         self.assertIn("peerpost quickstart", guide)
         self.assertIn("peerpost daemon install-autostart", readme)

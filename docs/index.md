@@ -32,6 +32,7 @@ peerpost doctor --self-test
 
 - [Daily Usage](usage.md)
 - [Agent Adapter Setup](adapters.md)
+- [Command Reference](commands.md)
 - [Release Checklist](release.md)
 
 ## Safety Model
@@ -39,4 +40,3 @@ peerpost doctor --self-test
 peerpost does not send keystrokes, control terminals, execute message bodies, or contact external network services. Message bodies are untrusted peer content.
 
 Hook output includes a safety preamble and avoids repeated stop-hook blocking when detectable.
-
