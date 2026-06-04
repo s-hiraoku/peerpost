@@ -346,9 +346,14 @@ def message_body_arg(args: argparse.Namespace) -> str:
     if args.stdin and args.message is not None:
         raise ValueError("pass either MESSAGE or --stdin, not both")
     if args.stdin:
-        return sys.stdin.read()
+        body = sys.stdin.read()
+        if body == "":
+            raise ValueError("empty message body from stdin")
+        return body
     if args.message is None:
         raise ValueError("missing message body; pass MESSAGE or --stdin")
+    if args.message == "":
+        raise ValueError("empty message body")
     return args.message
 
 

@@ -360,6 +360,60 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("pass either MESSAGE or --stdin", result.stderr)
 
+    def test_stdin_message_rejects_empty_input(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        send = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--stdin",
+            input_text="",
+        )
+        self.assertEqual(send.returncode, 2)
+        self.assertIn("empty message body from stdin", send.stderr)
+
+        empty_arg = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "",
+        )
+        self.assertEqual(empty_arg.returncode, 2)
+        self.assertIn("empty message body", empty_arg.stderr)
+
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "reply target",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        reply = self.run_peerpost(
+            "reply",
+            sent.stdout.split()[1],
+            "--from",
+            "codex",
+            "--team",
+            "dev",
+            "--stdin",
+            input_text="",
+        )
+        self.assertEqual(reply.returncode, 2)
+        self.assertIn("empty message body from stdin", reply.stderr)
+
     def test_reply_sends_back_to_original_sender(self) -> None:
         self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
         self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")

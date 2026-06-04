@@ -51,6 +51,8 @@ Send a multiline body from stdin:
 git diff --stat | peerpost send --to claude --stdin
 ```
 
+`--stdin` rejects empty input so a broken pipe or empty command does not create a blank message.
+
 Broadcast to all registered agents in the team except yourself:
 
 ```sh

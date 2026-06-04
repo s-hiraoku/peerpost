@@ -132,6 +132,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("most recent pending message time", readme)
         self.assertIn("most recent pending message time", guide)
         self.assertIn("--stdin", guide)
+        self.assertIn("`--stdin` rejects empty input", guide)
         self.assertIn("plain output includes a `msg_...` id", guide)
         self.assertIn("unique message id prefix", guide)
 
