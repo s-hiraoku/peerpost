@@ -256,8 +256,11 @@ class PeerpostRequestHandler(socketserver.StreamRequestHandler):
         return body
 
     def _positive_int(self, request: dict[str, Any], key: str, default: int) -> int:
+        raw_value = request.get(key, default)
+        if isinstance(raw_value, bool):
+            raise RequestError("bad_request", f"{key} must be an integer")
         try:
-            value = int(request.get(key, default))
+            value = int(raw_value)
         except (TypeError, ValueError) as exc:
             raise RequestError("bad_request", f"{key} must be an integer") from exc
         if value < 1:

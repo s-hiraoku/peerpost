@@ -1651,6 +1651,10 @@ class CliIntegrationTest(unittest.TestCase):
             peerpost.request("drain", agent="codex", team="dev", limit=-1)
         with self.assertRaisesRegex(PeerpostClientError, "limit must be an integer"):
             peerpost.request("prune", before="9999-01-01T00:00:00Z", limit="many")
+        with self.assertRaisesRegex(PeerpostClientError, "limit must be an integer"):
+            peerpost.request("drain", agent="codex", team="dev", limit=True)
+        with self.assertRaisesRegex(PeerpostClientError, "limit must be an integer"):
+            peerpost.request("prune", before="9999-01-01T00:00:00Z", limit=True)
 
     def test_daemon_rejects_malformed_protocol_fields(self) -> None:
         peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])

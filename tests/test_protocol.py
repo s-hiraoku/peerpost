@@ -111,6 +111,7 @@ class ProtocolTest(unittest.TestCase):
         )
         self.assertIn("verification fails, it exits nonzero", guide)
         self.assertIn("Malformed field types return `bad_request`", readme)
+        self.assertIn("numeric limits must be JSON numbers, not booleans", readme)
         self.assertIn("Priority values are `low`, `normal`, `high`, or `urgent`", readme)
         self.assertIn("Stored metadata must be a JSON object", readme)
         self.assertIn("logs --tail` must be zero or greater", guide)
