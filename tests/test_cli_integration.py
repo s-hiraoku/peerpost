@@ -567,6 +567,19 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertIn("socket path too long", result.stderr)
         self.assertIn("PEERPOST_SOCKET", result.stderr)
 
+    def test_client_commands_report_long_socket_path(self) -> None:
+        env = {
+            **self.env,
+            "PEERPOST_SOCKET": str(Path(self.tmp.name) / ("peerpost-" + "x" * 120 + ".sock")),
+        }
+
+        result = self.run_peerpost("agents", "--team", "dev", env=env)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("socket path too long", result.stderr)
+        self.assertIn("set PEERPOST_SOCKET to a shorter path", result.stderr)
+
     def test_peerpostd_rejects_long_socket_path(self) -> None:
         env = {
             **self.env,

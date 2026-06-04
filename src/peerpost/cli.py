@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
-from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError
+from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError, SocketPathTooLong
 from .formatters import format_drain, format_json, format_monitor, format_plain
 from .paths import (
     ensure_home,
@@ -849,6 +849,14 @@ def command_doctor(args: argparse.Namespace) -> int:
         data = client().request("ping")
     except DaemonNotRunning:
         _doctor_check(checks, "daemon", "warn", NOT_RUNNING, "peerpost daemon start")
+    except SocketPathTooLong as exc:
+        _doctor_check(
+            checks,
+            "daemon",
+            "warn",
+            str(exc),
+            "export PEERPOST_SOCKET=/tmp/peerpost-$(id -u).sock",
+        )
     except PeerpostClientError as exc:
         _doctor_check(checks, "daemon", "error", str(exc), "peerpost daemon stop; peerpost daemon start")
     else:

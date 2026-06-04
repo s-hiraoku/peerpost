@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import socket
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 
-from .paths import get_paths
+from .paths import get_paths, unix_socket_path_length_message, unix_socket_path_too_long
 from .protocol import decode_json_line, encode_json_line, make_request_id
 
 
@@ -21,12 +22,22 @@ class DaemonNotRunning(PeerpostClientError):
     pass
 
 
+class SocketPathTooLong(PeerpostClientError):
+    pass
+
+
 class PeerpostClient:
     def __init__(self, socket_path: str | None = None, timeout: float = 5.0):
         self.socket_path = socket_path or str(get_paths().socket)
         self.timeout = timeout
 
     def _connect(self) -> socket.socket:
+        socket_path = Path(self.socket_path)
+        if unix_socket_path_too_long(socket_path):
+            raise SocketPathTooLong(
+                f"socket path too long: {unix_socket_path_length_message(socket_path)}; "
+                "set PEERPOST_SOCKET to a shorter path such as /tmp/peerpost-$(id -u).sock"
+            )
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.settimeout(self.timeout)
         try:

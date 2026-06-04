@@ -94,6 +94,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("private database", readme)
         self.assertIn("Keep custom `PEERPOST_SOCKET` values short", readme)
         self.assertIn("`PEERPOST_SOCKET` is too long", guide)
+        self.assertIn("client commands report `socket path too long`", readme)
+        self.assertIn("Client commands also report `socket path too long`", guide)
         self.assertIn("undeliverable empty broadcast", readme)
         self.assertIn("Broadcast fails if no other agent is registered", guide)
         self.assertIn("Direct sends to yourself are rejected", guide)

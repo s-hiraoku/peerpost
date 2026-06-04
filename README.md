@@ -368,7 +368,7 @@ The default socket is:
 /tmp/peerpost-<uid>.sock
 ```
 
-Keep custom `PEERPOST_SOCKET` values short. `peerpost doctor` warns when the Unix socket path is long enough to fail on common platforms.
+Keep custom `PEERPOST_SOCKET` values short. `peerpost doctor` warns when the Unix socket path is long enough to fail on common platforms, and client commands report `socket path too long` instead of a generic daemon-not-running error.
 
 ## Safety Model
 
