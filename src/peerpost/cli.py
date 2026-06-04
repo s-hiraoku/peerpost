@@ -7,6 +7,7 @@ import html
 import json
 import os
 import select
+import secrets
 import shlex
 import shutil
 import sqlite3
@@ -19,6 +20,7 @@ from typing import Any
 
 from . import __version__
 from .client import DaemonNotRunning, NOT_RUNNING, PeerpostClient, PeerpostClientError, SocketPathTooLong
+from .db import SCHEMA_VERSION
 from .formatters import format_drain, format_json, format_monitor, format_plain
 from .paths import (
     ensure_home,
@@ -617,6 +619,106 @@ def command_backup(args: argparse.Namespace) -> int:
     if not data.get("verified"):
         eprint("backup integrity check failed; do not use this backup for restore")
         return 1
+    return 0
+
+
+def verify_restore_source(input_path: Path) -> dict[str, Any]:
+    source = input_path.expanduser().resolve()
+    if not source.exists():
+        raise ValueError(f"restore input does not exist: {source}")
+    if source.is_dir():
+        raise ValueError(f"restore input is a directory: {source}")
+    try:
+        conn = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
+        try:
+            quick_check = [row[0] for row in conn.execute("PRAGMA quick_check").fetchall()]
+            foreign_key_check = [
+                tuple(row) for row in conn.execute("PRAGMA foreign_key_check").fetchall()
+            ]
+            row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        raise ValueError(f"restore input is not a readable peerpost SQLite database: {exc}") from exc
+    schema_version = row[0] if row else None
+    data = {
+        "source": str(source),
+        "bytes": source.stat().st_size,
+        "schema_version": schema_version,
+        "quick_check": quick_check,
+        "foreign_key_check": foreign_key_check,
+        "verified": quick_check == ["ok"] and not foreign_key_check,
+    }
+    if schema_version != SCHEMA_VERSION:
+        raise ValueError(
+            f"restore input schema_version {schema_version or 'missing'} is not supported; "
+            f"expected {SCHEMA_VERSION}"
+        )
+    if not data["verified"]:
+        raise ValueError("restore input failed SQLite integrity checks; refusing to restore")
+    return data
+
+
+def pre_restore_backup_path() -> Path:
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    return get_paths().home / "backups" / f"peerpost-before-restore-{stamp}.sqlite"
+
+
+def backup_current_db_for_restore(db_path: Path) -> Path | None:
+    if not db_path.exists():
+        return None
+    output = pre_restore_backup_path()
+    output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        output.parent.chmod(0o700)
+    except OSError:
+        pass
+    try:
+        source = sqlite3.connect(db_path)
+        try:
+            destination = sqlite3.connect(output)
+            try:
+                source.backup(destination)
+            finally:
+                destination.close()
+        finally:
+            source.close()
+    except sqlite3.Error:
+        output.unlink(missing_ok=True)
+        shutil.copy2(db_path, output)
+    restrict_file(output)
+    return output
+
+
+def command_restore(args: argparse.Namespace) -> int:
+    if daemon_ping() is not None:
+        raise ValueError("peerpostd is running; stop it first with: peerpost daemon stop")
+    source_data = verify_restore_source(Path(args.input))
+    paths = ensure_home(get_paths())
+    pre_restore_backup = backup_current_db_for_restore(paths.db)
+    temp_path = paths.db.with_name(f".{paths.db.name}.restore-{secrets.token_hex(4)}")
+    try:
+        shutil.copy2(source_data["source"], temp_path)
+        restrict_file(temp_path)
+        for sidecar in sqlite_sidecar_paths(paths.db):
+            sidecar.unlink(missing_ok=True)
+        temp_path.replace(paths.db)
+        restrict_file(paths.db)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    data = {
+        **source_data,
+        "path": str(paths.db),
+        "restored_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "pre_restore_backup": str(pre_restore_backup) if pre_restore_backup else None,
+    }
+    if args.output_format == "json":
+        print(format_json(data))
+        return 0
+    print(f"restored: {data['path']} from {data['source']}")
+    if pre_restore_backup:
+        print(f"previous database backup: {pre_restore_backup}")
     return 0
 
 
@@ -1705,6 +1807,11 @@ def build_parser() -> argparse.ArgumentParser:
     backup.add_argument("--overwrite", action="store_true", help="replace the output file if it already exists")
     backup.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
     backup.set_defaults(func=command_backup)
+
+    restore = sub.add_parser("restore")
+    restore.add_argument("--input", required=True, help="verified peerpost SQLite backup to restore")
+    restore.add_argument("--format", dest="output_format", choices=["plain", "json"], default="plain")
+    restore.set_defaults(func=command_restore)
 
     paths = sub.add_parser("paths")
     paths.set_defaults(func=command_paths)

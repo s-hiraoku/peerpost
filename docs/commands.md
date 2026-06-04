@@ -82,6 +82,7 @@ Hook output starts with the safety preamble and avoids repeated stop-hook blocki
 | `peerpost doctor --fix` | Repair safe local filesystem issues such as permissions and stale pid/socket files. |
 | `peerpost logs --tail 50` | Print recent daemon log lines. |
 | `peerpost backup` | Create and verify a SQLite backup. |
+| `peerpost restore --input <backup.sqlite>` | Restore a verified backup while the daemon is stopped. |
 | `peerpost prune --older-than-days 30` | Preview deletion of old messages whose deliveries are all done. |
 | `peerpost prune --older-than-days 30 --apply --backup-first` | Back up, verify the backup, then delete matched done messages. |
 

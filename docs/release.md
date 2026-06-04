@@ -43,6 +43,12 @@ Confirm:
 - A backup SQLite file is created.
 - `peerpost daemon stop` shuts down cleanly.
 
+Check restore only against a separate disposable `PEERPOST_HOME` with the daemon stopped:
+
+```sh
+peerpost restore --input <backup.sqlite>
+```
+
 ## Release Notes
 
 Before tagging:

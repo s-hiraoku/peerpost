@@ -1887,6 +1887,125 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(payload["foreign_key_check"][0][0], "deliveries")
         self.assertTrue(backup_path.exists())
 
+    def test_restore_refuses_while_daemon_is_running(self) -> None:
+        backup_path = Path(self.tmp.name) / "running-restore.sqlite"
+        backup = self.run_peerpost("backup", "--output", str(backup_path))
+        self.assertEqual(backup.returncode, 0, backup.stderr)
+
+        result = self.run_peerpost("restore", "--input", str(backup_path))
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("peerpostd is running", result.stderr)
+        self.assertIn("peerpost daemon stop", result.stderr)
+
+    def test_restore_replaces_database_from_verified_backup(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        original = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "before restore",
+        )
+        self.assertEqual(original.returncode, 0, original.stderr)
+        original_id = json.loads(original.stdout)["message"]["id"]
+        backup_path = Path(self.tmp.name) / "restore-source.sqlite"
+        backup = self.run_peerpost("backup", "--output", str(backup_path))
+        self.assertEqual(backup.returncode, 0, backup.stderr)
+
+        extra = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "after backup",
+        )
+        self.assertEqual(extra.returncode, 0, extra.stderr)
+        extra_id = json.loads(extra.stdout)["message"]["id"]
+        stop = self.run_peerpost("daemon", "stop")
+        self.assertEqual(stop.returncode, 0, stop.stderr)
+        self.daemon.wait(timeout=3)
+
+        restored = self.run_peerpost(
+            "restore",
+            "--input",
+            str(backup_path),
+            "--format",
+            "json",
+        )
+
+        self.assertEqual(restored.returncode, 0, restored.stderr)
+        payload = json.loads(restored.stdout)
+        self.assertEqual(payload["source"], str(backup_path.resolve()))
+        self.assertTrue(payload["verified"])
+        self.assertEqual(payload["quick_check"], ["ok"])
+        self.assertEqual(payload["foreign_key_check"], [])
+        self.assertIsNotNone(payload["pre_restore_backup"])
+        self.assertTrue(Path(payload["pre_restore_backup"]).exists())
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        conn = sqlite3.connect(db_path)
+        try:
+            restored_original = conn.execute(
+                "SELECT body FROM messages WHERE id = ?", (original_id,)
+            ).fetchone()
+            restored_extra = conn.execute(
+                "SELECT body FROM messages WHERE id = ?", (extra_id,)
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(restored_original[0], "before restore")
+        self.assertIsNone(restored_extra)
+
+    def test_restore_can_replace_corrupt_current_database(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "json",
+            "restorable",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+        message_id = json.loads(sent.stdout)["message"]["id"]
+        backup_path = Path(self.tmp.name) / "restore-good.sqlite"
+        backup = self.run_peerpost("backup", "--output", str(backup_path))
+        self.assertEqual(backup.returncode, 0, backup.stderr)
+        stop = self.run_peerpost("daemon", "stop")
+        self.assertEqual(stop.returncode, 0, stop.stderr)
+        self.daemon.wait(timeout=3)
+        db_path = Path(self.env["PEERPOST_HOME"]) / "peerpost.sqlite"
+        db_path.write_bytes(b"not a sqlite database")
+
+        restored = self.run_peerpost("restore", "--input", str(backup_path), "--format", "json")
+
+        self.assertEqual(restored.returncode, 0, restored.stderr)
+        payload = json.loads(restored.stdout)
+        self.assertIsNotNone(payload["pre_restore_backup"])
+        self.assertEqual(Path(payload["pre_restore_backup"]).read_bytes(), b"not a sqlite database")
+        conn = sqlite3.connect(db_path)
+        try:
+            row = conn.execute("SELECT body FROM messages WHERE id = ?", (message_id,)).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row[0], "restorable")
+
     def test_daemon_rejects_oversized_message_body(self) -> None:
         peerpost = PeerpostClient(socket_path=self.env["PEERPOST_SOCKET"])
         with self.assertRaisesRegex(PeerpostClientError, f"body exceeds {MAX_BODY_CHARS}"):

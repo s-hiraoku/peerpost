@@ -303,6 +303,16 @@ Existing backup files are not overwritten unless you pass `--overwrite`.
 Backups are written to a temporary file first and moved into place only after SQLite finishes the backup.
 After writing the snapshot, `backup` runs SQLite `quick_check` and `foreign_key_check` on the backup file and reports whether it was verified. If verification fails, the command exits nonzero.
 
+To restore a verified backup, stop the daemon first:
+
+```sh
+peerpost daemon stop
+peerpost restore --input ~/peerpost-backup.sqlite
+peerpost daemon start
+```
+
+`restore` refuses to run while `peerpostd` is responding. It verifies the input backup, saves the current database under `<PEERPOST_HOME>/backups/peerpost-before-restore-<timestamp>.sqlite`, then replaces `peerpost.sqlite`.
+
 To see old completed messages that can be removed:
 
 ```sh

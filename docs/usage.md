@@ -194,6 +194,16 @@ peerpost backup
 
 `backup` verifies the snapshot with SQLite `quick_check` and `foreign_key_check` before reporting success. If verification fails, it exits nonzero.
 
+Restore a verified backup while the daemon is stopped:
+
+```sh
+peerpost daemon stop
+peerpost restore --input ~/peerpost-backup.sqlite
+peerpost daemon start
+```
+
+`restore` refuses to run while `peerpostd` is responding. It verifies the input backup first, saves the current database under `<PEERPOST_HOME>/backups/peerpost-before-restore-<timestamp>.sqlite`, then replaces `peerpost.sqlite`.
+
 Preview deletion of old fully done messages:
 
 ```sh

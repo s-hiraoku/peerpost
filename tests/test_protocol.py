@@ -92,6 +92,7 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("peerpost doctor --self-test", checklist)
         self.assertIn("peerpost status --team dev", checklist)
         self.assertIn("peerpost backup", checklist)
+        self.assertIn("peerpost restore --input <backup.sqlite>", checklist)
         self.assertIn("peerpost daemon stop", checklist)
         self.assertIn("Pages workflow publishes the user guide", checklist)
 
@@ -147,11 +148,14 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("reports whether it was verified", readme)
         self.assertIn("SQLite `quick_check` and `foreign_key_check` on the backup", readme)
         self.assertIn("verification fails, the command exits nonzero", readme)
+        self.assertIn("peerpost restore --input ~/peerpost-backup.sqlite", readme)
+        self.assertIn("`restore` refuses to run while `peerpostd` is responding", readme)
         self.assertIn(
             "verifies the snapshot with SQLite `quick_check` and `foreign_key_check`",
             guide,
         )
         self.assertIn("verification fails, it exits nonzero", guide)
+        self.assertIn("peerpost restore --input ~/peerpost-backup.sqlite", guide)
         self.assertIn("Malformed field types return `bad_request`", readme)
         self.assertIn("numeric limits must be JSON numbers, not booleans", readme)
         self.assertIn("Priority values are `low`, `normal`, `high`, or `urgent`", readme)
