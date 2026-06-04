@@ -71,6 +71,8 @@ class ProtocolTest(unittest.TestCase):
         self.assertIn("stale pid and socket files", guide)
         self.assertIn("private home directory", readme)
         self.assertIn("home directory permissions", guide)
+        self.assertIn("backup directory", readme)
+        self.assertIn("backup directory permissions", guide)
         self.assertIn("private log/database permissions", readme)
         self.assertIn("log file permissions", guide)
         self.assertIn("missing agent registrations", readme)

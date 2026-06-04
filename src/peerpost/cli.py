@@ -679,6 +679,15 @@ def _repair_private_file(path: Path, repairs: list[str]) -> None:
         repairs.append(f"chmod 600 {path}")
 
 
+def _repair_private_dir(path: Path, repairs: list[str]) -> None:
+    if path.is_dir() and _mode_int(path) != 0o700:
+        try:
+            path.chmod(0o700)
+        except OSError:
+            return
+        repairs.append(f"chmod 700 {path}")
+
+
 def _doctor_autostart_check(checks: list[dict[str, Any]]) -> None:
     try:
         target = resolve_daemon_autostart_target("auto")
@@ -745,6 +754,7 @@ def command_doctor(args: argparse.Namespace) -> int:
             _repair_private_file(sidecar, repairs)
         _repair_private_file(paths.pid, repairs)
         _repair_private_file(paths.log, repairs)
+        _repair_private_dir(paths.home / "backups", repairs)
 
     checks: list[dict[str, Any]] = []
     home_mode = _mode_int(paths.home)
@@ -1124,6 +1134,29 @@ def command_doctor(args: argparse.Namespace) -> int:
             )
     else:
         _doctor_check(checks, "log", "info", f"{paths.log} does not exist yet")
+    backups_dir = paths.home / "backups"
+    if backups_dir.exists() and backups_dir.is_dir():
+        backups_mode = _mode_int(backups_dir)
+        if backups_mode == 0o700:
+            _doctor_check(checks, "backups", "ok", f"{backups_dir} mode {_mode(backups_dir)}")
+        else:
+            _doctor_check(
+                checks,
+                "backups",
+                "warn",
+                f"{backups_dir} mode {_mode(backups_dir)}; expected 0o700",
+                f"chmod 700 {backups_dir}",
+            )
+    elif backups_dir.exists():
+        _doctor_check(
+            checks,
+            "backups",
+            "warn",
+            f"{backups_dir} exists but is not a directory",
+            f"move or remove {backups_dir}",
+        )
+    else:
+        _doctor_check(checks, "backups", "info", f"{backups_dir} does not exist yet")
     _doctor_autostart_check(checks)
 
     has_errors = any(check["status"] == "error" for check in checks)
