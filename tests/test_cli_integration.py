@@ -138,6 +138,82 @@ class CliIntegrationTest(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(second.stdout, "")
 
+    def test_hook_repeat_stop_outputs_empty_without_draining(self) -> None:
+        self.run_peerpost("join", "--agent", "claude", "--type", "claude-code", "--team", "dev")
+        self.run_peerpost("join", "--agent", "codex", "--type", "codex", "--team", "dev")
+        self.run_peerpost("join", "--agent", "copilot", "--type", "copilot", "--team", "dev")
+        sent = self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "codex",
+            "--team",
+            "dev",
+            "repeat stop should not consume this",
+        )
+        self.assertEqual(sent.returncode, 0, sent.stderr)
+
+        repeated = self.run_peerpost(
+            "drain",
+            "--agent",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "codex-hook",
+            input_text='{"stop_hook_active": true}',
+        )
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(json.loads(repeated.stdout), {})
+
+        drained = self.run_peerpost(
+            "drain",
+            "--agent",
+            "codex",
+            "--team",
+            "dev",
+            "--format",
+            "plain",
+        )
+        self.assertEqual(drained.returncode, 0, drained.stderr)
+        self.assertIn("repeat stop should not consume this", drained.stdout)
+
+        self.run_peerpost(
+            "send",
+            "--from",
+            "claude",
+            "--to",
+            "copilot",
+            "--team",
+            "dev",
+            "copilot repeat stop should not consume this",
+        )
+        copilot_repeated = self.run_peerpost(
+            "drain",
+            "--agent",
+            "copilot",
+            "--team",
+            "dev",
+            "--format",
+            "copilot-hook",
+            input_text='{"event": {"copilot_agent_stop_active": true}}',
+        )
+        self.assertEqual(copilot_repeated.returncode, 0, copilot_repeated.stderr)
+        self.assertEqual(json.loads(copilot_repeated.stdout), {})
+
+        copilot_drained = self.run_peerpost(
+            "drain",
+            "--agent",
+            "copilot",
+            "--team",
+            "dev",
+            "--format",
+            "plain",
+        )
+        self.assertEqual(copilot_drained.returncode, 0, copilot_drained.stderr)
+        self.assertIn("copilot repeat stop should not consume this", copilot_drained.stdout)
+
     def test_agents_plain_output_sanitizes_workspace(self) -> None:
         joined = self.run_peerpost(
             "join",
